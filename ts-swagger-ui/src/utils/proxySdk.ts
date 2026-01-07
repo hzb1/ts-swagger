@@ -1,152 +1,197 @@
 import type {
   ProxyRequestMessage,
   ProxyResponseMessage,
-  ProxyResult,
   RequestSpec,
-  ResponseBody,
 } from '../../../extension/src/shared/types'
 
-/**
- * 生成唯一 requestId
- */
-function genRequestId(): string {
+/* ----------------------------------
+ * 内部状态
+ * ---------------------------------- */
+
+let pluginEnabled: boolean | null = null
+let pluginChecking: Promise<boolean> | null = null
+
+/* ----------------------------------
+ * 工具函数
+ * ---------------------------------- */
+
+function genRequestId() {
   return 'req_' + Date.now() + '_' + Math.random().toString(16).slice(2)
 }
 
-/**
- * 核心 proxyFetch
- * 调用 Chrome 插件跨域请求
- */
-export function proxyFetch(request: RequestSpec): Promise<ProxyResult> {
-  console.log('proxyFetch request: ', request)
-  return new Promise((resolve) => {
-
-    const requestId = genRequestId()
-    const message: ProxyRequestMessage = {
-      type: 'PROXY_REQUEST',
-      requestId,
-      payload: request,
-    }
-
-    function handleMessage(event: MessageEvent) {
-      const msg = event.data as ProxyResponseMessage
-      if (!msg || msg.type !== 'PROXY_RESPONSE') return
-      if (msg.requestId !== requestId) return
-      window.removeEventListener('message', handleMessage)
-      console.log('proxyFetch response: ', msg.result)
-      resolve(msg.result)
-    }
-
-    window.addEventListener('message', handleMessage)
-    window.postMessage(message, '*')
-  })
+function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
+  if (!headers) return {}
+  if (headers instanceof Headers) {
+    return Object.fromEntries(headers.entries())
+  }
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(headers)
+  }
+  return headers
 }
 
-/**
- * 构建 fetch 的 Body
- */
-function buildBody(body?: any): BodyInit | undefined {
-  if (!body) return undefined
-  if (body.type === 'json') return JSON.stringify(body.value)
-  if (body.type === 'text') return body.value
-  if (body.type === 'form') return new URLSearchParams(body.value).toString()
-}
+/* ----------------------------------
+ * 插件可用性检测（只检测一次）
+ * ---------------------------------- */
 
+export function checkPluginEnabled(timeout = 500): Promise<boolean> {
+  if (pluginEnabled !== null) return Promise.resolve(pluginEnabled)
+  if (pluginChecking) return pluginChecking
 
-/**
- * 插件是否启用
- */
-let pluginEnabled: boolean | null = null
-
-/**
- * 检查插件是否启用
- */
-export async function checkPluginEnabled(timeout = 500): Promise<boolean> {
-  if (pluginEnabled !== null) return pluginEnabled
-
-  return new Promise((resolve) => {
-    function handler(event: MessageEvent) {
-      if (event.data?.type === 'PLUGIN_PONG') {
+  pluginChecking = new Promise((resolve) => {
+    function handler(e: MessageEvent) {
+      if (e.data?.type === 'PLUGIN_PONG') {
+        cleanup()
         pluginEnabled = true
         resolve(true)
-        window.removeEventListener('message', handler)
       }
+    }
+
+    function cleanup() {
+      window.removeEventListener('message', handler)
+      pluginChecking = null
     }
 
     window.addEventListener('message', handler)
     window.postMessage({ type: 'PLUGIN_PING' }, '*')
 
-    // 超时认为插件不可用
     setTimeout(() => {
-      if (pluginEnabled === null) {
-        pluginEnabled = false
-        resolve(false)
-        window.removeEventListener('message', handler)
-      }
+      cleanup()
+      pluginEnabled = null
+      resolve(false)
     }, timeout)
+  })
+
+  return pluginChecking
+}
+
+/* ----------------------------------
+ * 插件代理 fetch（RAW）
+ * ---------------------------------- */
+
+async function proxyFetchRaw(
+  url: string,
+  init?: RequestInit,
+): Promise<{
+  status: number
+  statusText: string
+  headers: Record<string, string>
+  bodyText: string
+  bodyType: 'json' | 'text'
+}> {
+  const requestId = genRequestId()
+
+  const payload: RequestSpec = {
+    url,
+    method: init?.method || 'GET',
+    headers: normalizeHeaders(init?.headers),
+    body: init?.body ? { type: 'text', value: String(init.body) } : undefined,
+  }
+
+  const message: ProxyRequestMessage = {
+    type: 'PROXY_REQUEST',
+    requestId,
+    payload,
+  }
+
+  return new Promise((resolve, reject) => {
+    function handler(e: MessageEvent) {
+      const msg = e.data as ProxyResponseMessage
+      if (!msg || msg.type !== 'PROXY_RESPONSE') return
+      if (msg.requestId !== requestId) return
+
+      window.removeEventListener('message', handler)
+
+      if (!msg.result.ok) {
+        reject(new Error(msg.result.error?.message || 'Proxy fetch failed'))
+        return
+      }
+
+      const res = msg.result.response
+      resolve({
+        status: res.status,
+        statusText: res.statusText,
+        headers: res.headers,
+        bodyText: res.body.type === 'json' ? JSON.stringify(res.body.value) : res.body.value,
+        bodyType: res.body.type,
+      })
+    }
+
+    window.addEventListener('message', handler)
+    window.postMessage(message, '*')
   })
 }
 
+/* ----------------------------------
+ * Response-like 封装
+ * ---------------------------------- */
 
-/**
- * 统一请求方法
- * @param url 请求 URL
- * @param options { method, headers, body, timeout }
- */
-export async function request(
-  url: string,
-  options?: {
-    method?: string
-    headers?: Record<string, string>
-    body?: any
-    timeout?: number
-  },
-): Promise<ProxyResult> {
-  const method = options?.method?.toUpperCase() || 'GET'
-  const headers = options?.headers
-  const body = options?.body
-  const timeout = options?.timeout
+class ProxyResponse {
+  private _bodyUsed = false
 
+  constructor(
+    private raw: {
+      status: number
+      statusText: string
+      headers: Record<string, string>
+      bodyText: string
+      bodyType: 'json' | 'text'
+    },
+  ) {}
 
-  const isPlugin = await checkPluginEnabled()
-
-  if (isPlugin) {
-    // 调用插件
-    return proxyFetch({ url, method, headers, body, timeout })
-  } else {
-    // 浏览器原生 fetch
-    try {
-      const controller = new AbortController()
-      if (timeout) setTimeout(() => controller.abort(), timeout)
-
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: buildBody(body),
-        signal: controller.signal,
-      })
-
-      const text = await res.text()
-      let parsed: ResponseBody
-      try {
-        parsed = { type: 'json', value: JSON.parse(text) }
-      } catch {
-        parsed = { type: 'text', value: text }
-      }
-
-      return {
-        ok: true,
-        response: {
-          url: res.url,
-          status: res.status,
-          statusText: res.statusText,
-          headers: Object.fromEntries(res.headers.entries()),
-          body: parsed,
-        },
-        timing: { startTime: Date.now(), endTime: Date.now(), duration: 0 },
-      }
-    } catch (err: any) {
-      return { ok: false, error: { type: 'NETWORK_ERROR', message: err.message } }
-    }
+  get ok() {
+    return this.raw.status >= 200 && this.raw.status < 300
   }
+
+  get status() {
+    return this.raw.status
+  }
+
+  get statusText() {
+    return this.raw.statusText
+  }
+
+  get headers() {
+    return new Headers(this.raw.headers)
+  }
+
+  get bodyUsed() {
+    return this._bodyUsed
+  }
+
+  async text(): Promise<string> {
+    this._bodyUsed = true
+    return this.raw.bodyText
+  }
+
+  async json() {
+    if (this.raw.bodyType !== 'json') {
+      throw new Error('Response is not JSON')
+    }
+    this._bodyUsed = true
+    return JSON.parse(this.raw.bodyText)
+  }
+}
+
+/* ----------------------------------
+ * 最终统一 API：request ≈ fetch
+ * ---------------------------------- */
+
+export async function request(
+  input: RequestInfo,
+  init?: RequestInit,
+): Promise<Response | ProxyResponse> {
+  const url = typeof input === 'string' ? input : input.url
+
+  const usePlugin = await checkPluginEnabled()
+
+  if (!usePlugin) {
+    console.warn('usePlugin', usePlugin)
+    // 原生 fetch
+    return fetch(input, init)
+  }
+
+  // 插件 fetch
+  const raw = await proxyFetchRaw(url, init)
+  return new ProxyResponse(raw)
 }

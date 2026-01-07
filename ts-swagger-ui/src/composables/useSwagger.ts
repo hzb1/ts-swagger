@@ -29,14 +29,19 @@ export function useSwagger(options?: UseSwaggerOptions) {
   // 加载 Swagger 配置
   const init = async (configUrl: string) => {
     loading.value = true
+    config.value = null
     try {
       const response = await request(configUrl)
-      const res = await response.response.body.value
+      if (!response.ok) return
+      const res = await response.json()
+
       console.log('init config: ', res)
       config.value = res
       if (res.urls?.length) await loadDoc(res.urls[0].url)
     } catch (err: any) {
       error.value = '配置加载失败'
+
+      config.value = null
     } finally {
       loading.value = false
     }
@@ -49,7 +54,8 @@ export function useSwagger(options?: UseSwaggerOptions) {
     try {
       const apiDomain = unref(options?.apiDomain)
       const response = await request(apiDomain + url)
-      const res = await response.response.body.value
+      if (!response.ok) return
+      const res = await response.json()
       document.value = res
     } catch (err: any) {
       error.value = '文档加载失败'

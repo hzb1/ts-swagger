@@ -1,0 +1,5 @@
+
+/extension/node_modules/
+/ts-swagger-ui/node_modules/
+/extension/dist/
+/.idea/
