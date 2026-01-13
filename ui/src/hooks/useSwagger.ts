@@ -1,66 +1,71 @@
-import { ref, computed, onMounted, type Ref, unref } from 'vue'
+import { useEffect, useMemo, useState } from 'react'
 import type { OpenAPI } from 'openapi-types'
-import { apiProxyPrefix } from '@/config.ts'
 import { request } from '../../../utils/proxySdk.ts'
 
 type UseSwaggerOptions = {
-  // 接口文档域名和端口
-  apiDomain?: string | Ref<string>
+  // 接口文档域名和端口（可以是字符串或返回字符串的函数，用于兼容 Vue ref 形式）
+  apiDomain?: string | (() => string)
 }
 
 export function useSwagger(options?: UseSwaggerOptions) {
-  const config = ref<{ urls: { name: string; url: string }[] } | null>(null)
-  const document = ref<OpenAPI.Document | null>(null)
-  const currentServiceUrl = ref('')
-  const loading = ref(false)
-  const error = ref<string | null>(null)
+  const [config, setConfig] = useState<{ urls: { name: string; url: string }[] } | null>(null)
+  const [document, setDocument] = useState<OpenAPI.Document | null>(null)
+  const [currentServiceUrl, setCurrentServiceUrl] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // 搜索相关
-  const searchQuery = ref('')
-  const searchHistory = ref<string[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchHistory, setSearchHistory] = useState<string[]>([])
   const MAX_HISTORY = 12
 
-  // 初始化历史记录
-  onMounted(() => {
+  // 初始化历史记录（componentDidMount）
+  useEffect(() => {
     const saved = localStorage.getItem('swagger_search_history')
-    if (saved) searchHistory.value = JSON.parse(saved)
-  })
+    if (saved) {
+      try {
+        setSearchHistory(JSON.parse(saved))
+      } catch {
+        // ignore parse error
+      }
+    }
+  }, [])
 
   // 加载 Swagger 配置
   const init = async (configUrl: string) => {
-    loading.value = true
-    config.value = null
+    setLoading(true)
+    setConfig(null)
     try {
       const response = await request(configUrl)
       if (!response.ok) return
       const res = await response.json()
 
       console.log('init config: ', res)
-      config.value = res
+      setConfig(res)
       if (res.urls?.length) await loadDoc(res.urls[0].url)
     } catch (err: any) {
-      error.value = '配置加载失败'
-
-      config.value = null
+      setError('配置加载失败')
+      setConfig(null)
     } finally {
-      loading.value = false
+      setLoading(false)
     }
   }
 
   // 加载具体的 Swagger JSON 文档
   const loadDoc = async (url: string) => {
-    loading.value = true
-    currentServiceUrl.value = url
+    setLoading(true)
+    setCurrentServiceUrl(url)
     try {
-      const apiDomain = unref(options?.apiDomain)
+      const apiDomain =
+        typeof options?.apiDomain === 'function' ? options!.apiDomain() : options?.apiDomain ?? ''
       const response = await request(apiDomain + url)
       if (!response.ok) return
       const res = await response.json()
-      document.value = res
+      setDocument(res)
     } catch (err: any) {
-      error.value = '文档加载失败'
+      setError('文档加载失败')
     } finally {
-      loading.value = false
+      setLoading(false)
     }
   }
 
@@ -68,28 +73,36 @@ export function useSwagger(options?: UseSwaggerOptions) {
   const saveHistory = (text: string) => {
     const val = text.trim()
     if (!val) return
-    const index = searchHistory.value.indexOf(val)
-    if (index !== -1) searchHistory.value.splice(index, 1)
-    searchHistory.value.unshift(val)
-    if (searchHistory.value.length > MAX_HISTORY) searchHistory.value.pop()
-    localStorage.setItem('swagger_search_history', JSON.stringify(searchHistory.value))
+    setSearchHistory(prev => {
+      const list = [...prev]
+      const index = list.indexOf(val)
+      if (index !== -1) list.splice(index, 1)
+      list.unshift(val)
+      if (list.length > MAX_HISTORY) list.pop()
+      localStorage.setItem('swagger_search_history', JSON.stringify(list))
+      return list
+    })
   }
 
   const clearHistory = () => {
-    searchHistory.value = []
+    setSearchHistory([])
     localStorage.removeItem('swagger_search_history')
   }
 
   /**
    * 核心搜索逻辑：多维度扫描
    */
-  const filteredGroupedApis = computed(() => {
-    if (!document.value?.paths) return {}
-    const groups: Record<string, any[]> = {}
-    const query = searchQuery.value.toLowerCase().trim()
+  const filteredGroupedApis = useMemo(() => {
+    if (!document?.paths) return {} as Record<string, any[]>
+    const groups: Record<string, {
+      path: string;
+      method: string;
+      matchType: string;
+    }[]> = {}
+    const query = searchQuery.toLowerCase().trim()
 
-    Object.entries(document.value.paths).forEach(([path, pathItem]: [string, any]) => {
-      ;['get', 'post', 'put', 'delete', 'patch'].forEach((method) => {
+    Object.entries(document.paths).forEach(([path, pathItem]) => {
+      ;['get', 'post', 'put', 'delete', 'patch'].forEach(method => {
         const op = pathItem[method]
         if (!op) return
 
@@ -114,8 +127,9 @@ export function useSwagger(options?: UseSwaggerOptions) {
         }
       })
     })
+
     return groups
-  })
+  }, [document, searchQuery])
 
   return {
     config,
@@ -124,6 +138,7 @@ export function useSwagger(options?: UseSwaggerOptions) {
     loading,
     error,
     searchQuery,
+    setSearchQuery,
     searchHistory,
     filteredGroupedApis,
     init,

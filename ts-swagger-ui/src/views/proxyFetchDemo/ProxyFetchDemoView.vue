@@ -23,11 +23,11 @@
           </option>
         </select>
 
-<!--        <label style="margin-left: 10px">版本: </label>-->
-<!--        <select v-model="version">-->
-<!--          <option value="v3">v3</option>-->
-<!--          <option value="v2">v2</option>-->
-<!--        </select>-->
+        <!--        <label style="margin-left: 10px">版本: </label>-->
+        <!--        <select v-model="version">-->
+        <!--          <option value="v3">v3</option>-->
+        <!--          <option value="v2">v2</option>-->
+        <!--        </select>-->
       </div>
 
       <div class="nav-tools">
@@ -199,6 +199,10 @@ const ipOptions = ref<
   }[]
 >([
   {
+    label: 'nong',
+    value: 'http://172.16.7.149:9999',
+  },
+  {
     label: 'localhost:9966',
     value: 'http://localhost:9966',
   },
@@ -213,7 +217,7 @@ const ipOptions = ref<
  * 例如: http://localhost:9966
  * 例如: http://172.16.13.93:9000
  */
-const ip = ref(ipOptions.value[1].value)
+const ip = ref(ipOptions.value[0].value)
 
 const version = ref<'v2' | 'v3'>('v3')
 const selectedApi = ref<SwaggerApi | null>(null)
@@ -421,12 +425,14 @@ const copyFullFile = () => {
   flex: 1;
   overflow: hidden;
   background: #f4f7f9;
+  max-height: calc(100vh - 60px);
 }
 .sidebar {
   width: 320px;
   background: #fff;
   border-right: 1px solid #e1e4e8;
   overflow-y: auto;
+  height: calc(100vh - 60px);
 }
 .content-area {
   flex: 1;
