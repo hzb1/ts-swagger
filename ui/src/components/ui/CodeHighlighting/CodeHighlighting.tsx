@@ -8,7 +8,7 @@ hljs.registerLanguage('typescript', typescript)
 const CodeHighlighting = ({code}: { code?: string }) => {
 
   const htmlContent = useMemo(() => {
-    if (!code) return
+    if (!code) return '// 空的'
 
     return hljs.highlight(code, { language: 'typescript' }).value
   }, [code])

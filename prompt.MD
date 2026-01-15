@@ -20,7 +20,10 @@
       * 分号 （单选框，默认选中）
 
 期待生成的前端代码技术栈：
-* 前端：React 19 + TypeScript + Ant Design v6 + highlight.js
+
+* 前端技术栈：`React 19` `TypeScript` `Tailwindcss` `AntDesign v6` `Highlight.js`
+* 我希望样式是可配置的 使用 `css var` 来定义样式变量（列如主题色，导航栏高度）
+* 我希望样式尽可能使用 `Tailwindcss`, 组件使用 `AntDesign`
 
 ### 一、画布与基础规范
 画布尺寸：支持响应式布局，适配不同屏幕尺寸，PC端优先

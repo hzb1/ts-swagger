@@ -2,6 +2,7 @@
 .views {
     width: 100%;
     height: 100vh;
+    overflow: hidden;
 }
 
 .header-wrapper {
@@ -24,5 +25,66 @@
         /*flex: 1;*/
         /*display: flex;*/
         /*align-items: center;*/
+    }
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+
+    .service-select-wrapper {
+        width: 100%;
+        height: 64px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background-color: var(--ant-layout-header-bg);
+        flex-shrink: 0;
+    }
+
+    .api-list-wrapper {
+        flex: 1;
+        overflow: auto;
+    }
+}
+
+.content-wrapper {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0 16px 16px;
+    .breadcrumb {
+        margin: 8px 0;
+        flex-shrink: 0;
+    }
+    .content-container{
+        flex: 1;
+        overflow: hidden;
+    }
+}
+
+pre code.hljs{
+    width: 100%;
+    /*height: 100%;*/
+    min-width: fit-content;
+    height: fit-content;
+    /*min-height: fit-content;*/
+    overflow-x: inherit !important;
+}
+
+.api-detail-info{
+    margin-bottom: 16px;
+    .api-info{
+        margin-top: 8px;
+        display: flex;
+        align-items: baseline;
+        .method{
+            margin-right: 8px;
+        }
+        .path{
+            font-size: 16px;
+        }
     }
 }

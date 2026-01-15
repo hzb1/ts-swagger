@@ -9,7 +9,6 @@ import zhCN from 'antd/locale/zh_CN';
 
 import {ConfigProvider} from "antd";
 
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ConfigProvider locale={zhCN}>

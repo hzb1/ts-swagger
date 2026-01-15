@@ -2,7 +2,19 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react'
 import reactLogo from './assets/react.svg'
 // import viteLogo from '/vite.svg'
 import {LaptopOutlined, NotificationOutlined, UserOutlined} from '@ant-design/icons';
-import {AutoComplete, Input, type AutoCompleteProps, type MenuProps, Card, message, Row, Col} from 'antd';
+import {
+  AutoComplete,
+  Input,
+  type AutoCompleteProps,
+  type MenuProps,
+  Card,
+  message,
+  Row,
+  Col,
+  Select,
+  Spin,
+  Tag, Empty
+} from 'antd';
 import {Breadcrumb, Layout, Menu, theme} from 'antd';
 import './App.css'
 import {useSwagger} from "./hooks/useSwagger.ts";
@@ -11,6 +23,7 @@ import CodeHighlighting from "./components/ui/CodeHighlighting/CodeHighlighting.
 import {SwaggerToTS} from '../../utils/SwaggerParser.ts'
 import copyToClipboard from '../../utils/copyToClipboard/copyToClipboard.ts'
 import CopyIcon from "./components/CopyIcon.tsx";
+import SearchBar from "./components/ui/SearchBar/SearchBar.tsx";
 
 const {Header, Content, Sider} = Layout;
 
@@ -88,7 +101,12 @@ const App: React.FC = () => {
    * 例如: http://localhost:9966
    * 例如: http://172.16.13.93:9000
    */
-  const [ip, setIp] = useState(options[0].value)
+  const [ip, setIp] = useState<string>(options?.[2].value)
+
+  const onIpChange = (value: string) => {
+    setIp(value?.trim())
+    handleSearch()
+  }
 
   const handleSearch = () => {
     loadSwagger()
@@ -101,6 +119,7 @@ const App: React.FC = () => {
     currentServiceUrl,
     loading,
     searchQuery,
+    setSearchQuery,
     searchHistory,
     filteredGroupedApis,
     init,
@@ -114,20 +133,15 @@ const App: React.FC = () => {
 // 2. 调用配置持久化逻辑
   const {configState, generatorOptions, resetTemplate} = useOptions()
 
-  const [loadingSwagger, setLoadingSwagger] = useState(false)
-
   const [version, setVersion] = useState('v3')
 
   const loadSwagger = async () => {
-    setLoadingSwagger(true)
     try {
       const baseUrl = getBaseUrl(ip)
       const configUrl = `${baseUrl}/${version}${swaggerConfigUrl}`
       await init(configUrl)
-      setLoadingSwagger(false)
     } catch (error) {
       console.error('加载 Swagger 失败:', error)
-      setLoadingSwagger(false)
     }
   }
 
@@ -146,7 +160,7 @@ const App: React.FC = () => {
         type: 'group',
         children: apis.map((api) => ({
           key: api.path + api.method,
-          label: api.summary,
+          label: api.summary || '未命名接口',
         })),
       }
     })
@@ -157,7 +171,6 @@ const App: React.FC = () => {
    * 菜单选择回调
    */
   const onMenuSelect: MenuProps['onSelect'] = (data) => {
-    console.log(data)
     const {key} = data;
     // 通过key 找出selectedApi
 
@@ -171,8 +184,6 @@ const App: React.FC = () => {
         }
       })
     })
-    console.log('apis', apiList)
-    console.log('findApi', findApi)
     setSelectedApi(findApi)
   };
 
@@ -188,7 +199,21 @@ const App: React.FC = () => {
       'Request Body': res.requestBody,
       'Response Data': res.responseData,
     }
-  }, [document, selectedApi])
+  }, [document, generatorOptions, selectedApi])
+
+  // 更新 URL 参数 (不触发刷新)
+  const updateUrl = (service: string, api?: any) => {
+    const newUrl = new URL(window.location.href)
+    newUrl.searchParams.set('service', service)
+    if (api) {
+      newUrl.searchParams.set('path', api.path)
+      newUrl.searchParams.set('method', api.method)
+    } else {
+      newUrl.searchParams.delete('path')
+      newUrl.searchParams.delete('method')
+    }
+    window.history.replaceState({}, '', newUrl.toString())
+  }
 
   const handleCopy = async (content?: string) => {
     const b = await copyToClipboard(content)
@@ -197,87 +222,149 @@ const App: React.FC = () => {
     }
   }
 
+  const handleServiceChange = async (url: string) => {
+    await loadDoc(url)
+    // 切换服务清空选中
+    setSelectedApi(undefined)
+    updateUrl(url)
+  }
+
+  const serviceOptions = useMemo(() => {
+    return config?.urls.map((item) => ({
+      label: item.name,
+      value: item.url,
+    }))
+  }, [config?.urls])
+
   return (
     <>
       {contextHolder}
       <Layout className={'views'}>
-        <Header className={'header-wrapper'} style={{display: 'flex', alignItems: 'justify-content-between'}}>
-          <div className="logo-warp">
-            <img className={'logo'} src={reactLogo} alt="logo"/>
+        <Sider width={280} style={{background: colorBgContainer}}>
+          <div className={'sidebar'}>
+            <div className={'service-select-wrapper'}>
+              <Select
+                value={currentServiceUrl}
+                style={{width: 180}}
+                loading={loading}
+                onChange={handleServiceChange}
+                options={serviceOptions}
+              />
+            </div>
+            <SearchBar value={searchQuery} onChange={setSearchQuery}/>
+            <Spin spinning={loading} wrapperClassName={'api-list-wrapper'}>
+              <Menu
+                mode="inline"
+                style={{height: '100%', borderInlineEnd: 0}}
+                items={items2}
+                onSelect={onMenuSelect}
+              />
+            </Spin>
           </div>
-
-          <div className={'search-wrapper'}>
-            <AutoComplete
-              value={ip}
-              onChange={setIp}
-              options={options}
-              style={{width: 240}}
-              placeholder={"输入 IP 地址 ( 例如: http://localhost:9966 )"}
-              showSearch={{onSearch: handleSearch}}
-            >
-              <Input.Search placeholder="input here" enterButton/>
-            </AutoComplete>
-
-          </div>
-
-          <div></div>
-
-
-        </Header>
+        </Sider>
 
         <Layout>
-          <Sider width={280} style={{background: colorBgContainer}}>
-            <Menu
-              mode="inline"
-              style={{height: '100%', borderInlineEnd: 0}}
-              items={items2}
-              onSelect={onMenuSelect}
-            />
-          </Sider>
-          <Layout style={{padding: '0 24px 24px'}}>
+          <Header className={'header-wrapper'} style={{display: 'flex', alignItems: 'justify-content-between'}}>
+            {/*<div className="logo-warp">*/}
+            {/*  <img className={'logo'} src={reactLogo} alt="logo"/>*/}
+            {/*</div>*/}
+
+            <div className={'search-wrapper'}>
+              <AutoComplete
+                value={ip}
+                onChange={onIpChange}
+                options={options}
+                style={{width: 280}}
+                placeholder={"输入 IP 地址 ( 例如: http://localhost:9966 )"}
+                showSearch={{onSearch: handleSearch}}
+              >
+                <Input.Search placeholder="input here" enterButton/>
+              </AutoComplete>
+
+            </div>
+
+            <div></div>
+
+
+          </Header>
+          <Layout className={'content-wrapper'}>
             <Breadcrumb
               items={[{title: 'Home'}, {title: 'List'}, {title: 'App'}]}
-              style={{margin: '16px 0'}}
+              className={'breadcrumb'}
             />
             <Content
               style={{
-                padding: 24,
+                padding: 16,
                 margin: 0,
                 minHeight: 280,
                 background: colorBgContainer,
                 borderRadius: borderRadiusLG,
               }}
+              className={'content-container'}
             >
-              {/*<div>{JSON.stringify(tsCodeParts)}</div>*/}
-              <Row gutter={16}>
-                <Col span={24} lg={24} xl={12} xxl={8}>
-                  <Card title="Models" extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.Models)}/>}>
-                    <CodeHighlighting code={tsCodeParts?.Models}/>
-                  </Card>
-                </Col>
+              {
+                selectedApi ? (
+                  <Row gutter={[16, 16]} style={{height: '100%'}}>
+                    <Col span={12}>
 
-                <Col span={24} lg={24} xl={12} xxl={8}>
-                  <Card title="Query Params"
-                        extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Query Params'])}/>}>
-                    <CodeHighlighting code={tsCodeParts?.["Query Params"]}/>
-                  </Card>
-                </Col>
 
-                <Col span={24} lg={24} xl={12} xxl={8}>
-                  <Card title="Request Body"
-                        extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Request Body'])}/>}>
-                    <CodeHighlighting code={tsCodeParts?.["Request Body"]}/>
-                  </Card>
-                </Col>
 
-                <Col span={24} lg={24} xl={12} xxl={8}>
-                  <Card title="Response Data"
-                        extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Response Data'])}/>}>
-                    <CodeHighlighting code={tsCodeParts?.["Response Data"]}/>
-                  </Card>
-                </Col>
+                      <div className="api-detail-info">
+                        <div className="title-row">
+                          <h2>{ selectedApi?.summary }</h2>
+                          {/*<button className="copy-all-btn" onClick={() => handleCopy(tsCodeParts?.['Request Function'])}>复制全量代码</button>*/}
+                        </div>
+                        <div className="api-info">
+                          <Tag className="method">{ selectedApi?.method }</Tag>
+                          <span className="path">{ selectedApi?.path }</span>
+                        </div>
+                      </div>
 
-              </Row>
+                      <Row gutter={[16, 16]}>
+                        <Col span={24}>
+                          <Card title="Query Params"
+                                extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Query Params'])}/>}>
+                            <CodeHighlighting code={tsCodeParts?.["Query Params"]}/>
+                          </Card>
+                        </Col>
+                        <Col span={24}>
+                          <Card title="Request Body"
+                                extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Request Body'])}/>}>
+                            <CodeHighlighting code={tsCodeParts?.["Request Body"]}/>
+                          </Card>
+                        </Col>
+
+                        <Col span={24}>
+                          <Card title="Response Data"
+                                extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Response Data'])}/>}>
+                            <CodeHighlighting code={tsCodeParts?.["Response Data"]}/>
+                          </Card>
+                        </Col>
+                      </Row>
+
+                    </Col>
+
+                    <Col span={12} style={{height: '100%'}}>
+                      <Card title="Models" extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.Models)}/>} style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        height: '100%',
+                      }} styles={{
+                        body: {
+                          flex: 1,
+                          overflow: 'auto',
+                          padding: 0,
+                        }
+                      }}>
+                        <CodeHighlighting code={tsCodeParts?.Models}/>
+                      </Card>
+                    </Col>
+
+                  </Row>
+                ) : (
+                  <Empty description={'请选择 API'} />
+                )
+              }
             </Content>
           </Layout>
         </Layout>

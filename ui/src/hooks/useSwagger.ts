@@ -93,7 +93,7 @@ export function useSwagger(options?: UseSwaggerOptions) {
    * 核心搜索逻辑：多维度扫描
    */
   const filteredGroupedApis = useMemo(() => {
-    if (!document?.paths) return {} as Record<string, any[]>
+    if (!document?.paths) return {}
     const groups: Record<string, {
       path: string;
       method: string;
