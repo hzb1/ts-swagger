@@ -4,17 +4,21 @@ import {
 } from './shared/types'
 
 window.addEventListener('message', (event) => {
-  if (event.source !== window) return
+  try {
+    if (event.source !== window) return
 
-  const msg = event.data as ProxyRequestMessage
+    const msg = event.data as ProxyRequestMessage
 
-  if (msg?.type === 'PLUGIN_PING') {
-    window.postMessage({ type: 'PLUGIN_PONG' }, '*')
+    if (msg?.type === 'PLUGIN_PING') {
+      window.postMessage({type: 'PLUGIN_PONG'}, '*')
+    }
+
+    if (msg?.type !== 'PROXY_REQUEST') return
+
+    chrome.runtime.sendMessage(msg, (response: ProxyResponseMessage) => {
+      window.postMessage(response, '*')
+    })
+  } catch (error) {
+    console.error('处理消息时出错:', error)
   }
-
-  if (msg?.type !== 'PROXY_REQUEST') return
-
-  chrome.runtime.sendMessage(msg, (response: ProxyResponseMessage) => {
-    window.postMessage(response, '*')
-  })
 })

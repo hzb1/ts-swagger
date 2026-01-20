@@ -1,7 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react'
-import reactLogo from './assets/react.svg'
-// import viteLogo from '/vite.svg'
-import {LaptopOutlined, NotificationOutlined, UserOutlined} from '@ant-design/icons';
+import React, {useCallback, useEffect, useEffectEvent, useMemo, useState} from 'react'
 import {
   AutoComplete,
   Input,
@@ -24,8 +21,11 @@ import {SwaggerToTS} from '../../utils/SwaggerParser.ts'
 import copyToClipboard from '../../utils/copyToClipboard/copyToClipboard.ts'
 import CopyIcon from "./components/CopyIcon.tsx";
 import SearchBar from "./components/ui/SearchBar/SearchBar.tsx";
+import ApiList from "./components/ApiList/ApiList.tsx";
+import Method from "./components/ui/Method/Method.tsx";
+import {CheckCircleOutlined} from "@ant-design/icons";
 
-const {Header, Content, Sider} = Layout;
+const {Header, Content, Sider } = Layout;
 
 interface SwaggerParameter {
   name: string
@@ -50,26 +50,6 @@ function getBaseUrl(ip: string) {
   return url
 }
 
-// const items2: MenuProps['items'] = [UserOutlined, LaptopOutlined, NotificationOutlined].map(
-//   (icon, index) => {
-//     const key = String(index + 1);
-//
-//     return {
-//       key: `sub${key}`,
-//       icon: React.createElement(icon),
-//       label: `subnav ${key}`,
-//       children: Array.from({length: 4}).map((_, j) => {
-//         const subKey = index * 4 + j + 1;
-//         return {
-//           key: subKey,
-//           label: `option${subKey}`,
-//         };
-//       }),
-//     };
-//   },
-// );
-
-
 const App: React.FC = () => {
   const {
     token: {colorBgContainer, borderRadiusLG},
@@ -81,6 +61,10 @@ const App: React.FC = () => {
   const [selectedApi, setSelectedApi] = useState<SwaggerApi>()
 
   const [options, setOptions] = useState<AutoCompleteProps['options']>([
+    {
+      label: 'lin',
+      value: 'http://172.16.7.22:9999',
+    },
     {
       label: 'nong',
       value: 'http://172.16.7.149:9999',
@@ -101,22 +85,24 @@ const App: React.FC = () => {
    * 例如: http://localhost:9966
    * 例如: http://172.16.13.93:9000
    */
-  const [ip, setIp] = useState<string>(options?.[2].value)
+  const [ip, setIp] = useState<string>(options?.[0].value)
 
   const onIpChange = (value: string) => {
+    console.log('onIpChange', value)
     setIp(value?.trim())
-    handleSearch()
   }
 
-  const handleSearch = () => {
-    loadSwagger()
+  const handleSearch = (value: string) => {
+    const nextIp = value?.trim()
+    console.log('搜索', {ip, version, nextIp})
+    loadSwagger({ip: nextIp, version})
   }
+  const [currentServiceUrl, setCurrentServiceUrl] = useState('')
 
   // 1. 调用 Swagger 业务逻辑
   const {
     config,
     document,
-    currentServiceUrl,
     loading,
     searchQuery,
     setSearchQuery,
@@ -127,7 +113,7 @@ const App: React.FC = () => {
     saveHistory,
     clearHistory,
   } = useSwagger({
-    apiDomain: () => ip,
+    apiDomain: ip,
   })
 
 // 2. 调用配置持久化逻辑
@@ -135,7 +121,12 @@ const App: React.FC = () => {
 
   const [version, setVersion] = useState('v3')
 
-  const loadSwagger = async () => {
+  const loadSwagger = async ({ip, version}: {ip: string, version: string}) => {
+    if (!ip) {
+      messageApi.error('请输入 IP 地址')
+      return
+    }
+    console.log({ip, version})
     try {
       const baseUrl = getBaseUrl(ip)
       const configUrl = `${baseUrl}/${version}${swaggerConfigUrl}`
@@ -146,31 +137,15 @@ const App: React.FC = () => {
   }
 
   useEffect(() => {
-    if (ip) {
-      loadSwagger()
-    }
+    console.log('on useEffect loadSwagger')
+    loadSwagger({ip, version})
   }, [])
-
-  // @ts-ignore
-  const items2: MenuProps['items'] = useMemo(() => {
-    return Object.entries(filteredGroupedApis).map(([tag, apis]) => {
-      return {
-        key: tag,
-        label: tag,
-        type: 'group',
-        children: apis.map((api) => ({
-          key: api.path + api.method,
-          label: api.summary || '未命名接口',
-        })),
-      }
-    })
-  }, [filteredGroupedApis])
 
 
   /**
    * 菜单选择回调
    */
-  const onMenuSelect: MenuProps['onSelect'] = (data) => {
+  const onMenuSelect: MenuProps['onSelect'] = (data: { key: string }) => {
     const {key} = data;
     // 通过key 找出selectedApi
 
@@ -179,7 +154,7 @@ const App: React.FC = () => {
     let findApi;
     apiList?.forEach((apis) => {
       apis.forEach((api) => {
-        if (key === api.path + api.method) {
+        if (key === api.key) {
           findApi = api;
         }
       })
@@ -202,7 +177,7 @@ const App: React.FC = () => {
   }, [document, generatorOptions, selectedApi])
 
   // 更新 URL 参数 (不触发刷新)
-  const updateUrl = (service: string, api?: any) => {
+  const updateUrl = (service: string, api?: SwaggerApi) => {
     const newUrl = new URL(window.location.href)
     newUrl.searchParams.set('service', service)
     if (api) {
@@ -222,12 +197,16 @@ const App: React.FC = () => {
     }
   }
 
-  const handleServiceChange = async (url: string) => {
-    await loadDoc(url)
-    // 切换服务清空选中
-    setSelectedApi(undefined)
-    updateUrl(url)
-  }
+  const handleServiceChange = useCallback((serviceUrl: string) => {
+    setCurrentServiceUrl(serviceUrl)
+    const fullUrl = `${ip}${serviceUrl}`
+    debugger;
+    updateUrl(serviceUrl)
+    loadDoc(fullUrl).then(() => {
+      // 切换服务清空选中
+      setSelectedApi(undefined)
+    })
+  }, [ip, loadDoc, setCurrentServiceUrl])
 
   const serviceOptions = useMemo(() => {
     return config?.urls.map((item) => ({
@@ -235,6 +214,13 @@ const App: React.FC = () => {
       value: item.url,
     }))
   }, [config?.urls])
+
+  const apiGroups = useMemo(() => {
+    return Object.entries(filteredGroupedApis).map(([tag, apis]) => ({
+      name: tag,
+      children: apis,
+    }))
+  }, [filteredGroupedApis])
 
   return (
     <>
@@ -253,26 +239,19 @@ const App: React.FC = () => {
             </div>
             <SearchBar value={searchQuery} onChange={setSearchQuery}/>
             <Spin spinning={loading} wrapperClassName={'api-list-wrapper'}>
-              <Menu
-                mode="inline"
-                style={{height: '100%', borderInlineEnd: 0}}
-                items={items2}
-                onSelect={onMenuSelect}
-              />
+              <ApiList apis={apiGroups} onSelect={onMenuSelect}/>
             </Spin>
           </div>
         </Sider>
 
         <Layout>
           <Header className={'header-wrapper'} style={{display: 'flex', alignItems: 'justify-content-between'}}>
-            {/*<div className="logo-warp">*/}
-            {/*  <img className={'logo'} src={reactLogo} alt="logo"/>*/}
-            {/*</div>*/}
 
             <div className={'search-wrapper'}>
               <AutoComplete
                 value={ip}
                 onChange={onIpChange}
+                onSelect={handleSearch}
                 options={options}
                 style={{width: 280}}
                 placeholder={"输入 IP 地址 ( 例如: http://localhost:9966 )"}
@@ -283,8 +262,9 @@ const App: React.FC = () => {
 
             </div>
 
-            <div></div>
-
+            <div>
+              <Tag color="success" variant={'solid'} icon={<CheckCircleOutlined />} >已连接</Tag>
+            </div>
 
           </Header>
           <Layout className={'content-wrapper'}>
@@ -305,18 +285,17 @@ const App: React.FC = () => {
               {
                 selectedApi ? (
                   <Row gutter={[16, 16]} style={{height: '100%'}}>
-                    <Col span={12}>
-
+                    <Col span={12} className={'left-main'}>
 
 
                       <div className="api-detail-info">
                         <div className="title-row">
-                          <h2>{ selectedApi?.summary }</h2>
+                          <h2>{selectedApi?.summary}</h2>
                           {/*<button className="copy-all-btn" onClick={() => handleCopy(tsCodeParts?.['Request Function'])}>复制全量代码</button>*/}
                         </div>
                         <div className="api-info">
-                          <Tag className="method">{ selectedApi?.method }</Tag>
-                          <span className="path">{ selectedApi?.path }</span>
+                          <Method method={selectedApi?.method} className={'method'} />
+                          <span className="path">{selectedApi?.path}</span>
                         </div>
                       </div>
 
@@ -362,7 +341,7 @@ const App: React.FC = () => {
 
                   </Row>
                 ) : (
-                  <Empty description={'请选择 API'} />
+                  <Empty description={'请选择 API'}/>
                 )
               }
             </Content>

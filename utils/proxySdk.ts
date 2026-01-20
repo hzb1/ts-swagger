@@ -94,16 +94,24 @@ async function proxyFetchRaw(
     payload,
   }
 
+  // @ts-ignore
   return new Promise((resolve, reject) => {
     function handler(e: MessageEvent) {
       const msg = e.data as ProxyResponseMessage
+      // debugger;
       if (!msg || msg.type !== 'PROXY_RESPONSE') return
       if (msg.requestId !== requestId) return
+
+      if (typeof msg.result !== 'object' || msg.result === null) {
+        console.log('插件 fetch 失败:', msg)
+        return
+      }
 
       window.removeEventListener('message', handler)
 
       if (!msg.result.ok) {
-        reject(new Error(msg.result.error?.message || 'Proxy fetch failed'))
+        // console.error('插件 fetch 失败:', msg)
+        reject(new Error(msg?.result?.error?.message || 'Proxy fetch failed'))
         return
       }
 
@@ -169,7 +177,7 @@ class ProxyResponse {
       throw new Error('Response is not JSON')
     }
     this._bodyUsed = true
-    console.warn(this.raw.bodyText)
+    // console.warn(this.raw.bodyText)
     return JSON.parse(this.raw.bodyText)
   }
 }
@@ -184,13 +192,13 @@ export async function request(
 ): Promise<Response | ProxyResponse> {
   const url = typeof input === 'string' ? input : input.url
 
-  const usePlugin = await checkPluginEnabled()
-
-  if (!usePlugin) {
-    console.warn('usePlugin', usePlugin)
-    // 原生 fetch
-    return fetch(input, init)
-  }
+  // const usePlugin = await checkPluginEnabled()
+  //
+  // if (!usePlugin) {
+  //   console.warn('usePlugin', usePlugin)
+  //   // 原生 fetch
+  //   return fetch(input, init)
+  // }
 
   console.warn('request', url, init)
 

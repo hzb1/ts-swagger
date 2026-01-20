@@ -20,6 +20,7 @@ chrome.runtime.onMessage.addListener(
 async function handleRequest(
   msg: ProxyRequestMessage
 ): Promise<ProxyResponseMessage> {
+  console.warn(`收到请求:`, msg)
   const { requestId, payload } = msg
   const startTime = Date.now()
 
@@ -56,6 +57,7 @@ async function handleRequest(
         duration: endTime - startTime
       }
     }
+    console.error(`[${requestId}] 成功响应`, success)
 
     return {
       type: 'PROXY_RESPONSE',
@@ -63,6 +65,7 @@ async function handleRequest(
       result: success
     }
   } catch (err: any) {
+    console.error(`[${requestId}] 失败响应`, err)
     const failure: ProxyFailure = {
       ok: false,
       error: {

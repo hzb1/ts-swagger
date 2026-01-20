@@ -1,4 +1,38 @@
 
 .api-list-wrapper {
     height: 100%;
+    .api-item{
+        width: 100%;
+        display: flex;
+        justify-items: flex-start;
+        cursor: pointer;
+        padding: 6px 12px;
+        box-sizing: border-box;
+        background-color: transparent;
+        transition: background-color 0.3s ease-in-out;
+        border-radius: 4px;
+        .tag-wrapper{
+            display: flex;
+            align-self: flex-start;
+            align-items: flex-start;
+            justify-content: flex-end;
+            flex-shrink: 0;
+            margin-right: 8px;
+            width: 4em;
+            text-align: center;
+            font-size: 10px;
+            .api-item-method {
+                font-size: 10px;
+            }
+        }
+        .api-item-info{
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        &:hover, &.active{
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+    }
 }

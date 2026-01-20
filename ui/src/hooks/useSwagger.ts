@@ -3,14 +3,12 @@ import type { OpenAPI } from 'openapi-types'
 import { request } from '../../../utils/proxySdk.ts'
 
 type UseSwaggerOptions = {
-  // 接口文档域名和端口（可以是字符串或返回字符串的函数，用于兼容 Vue ref 形式）
-  apiDomain?: string | (() => string)
+  apiDomain?: string
 }
 
 export function useSwagger(options?: UseSwaggerOptions) {
   const [config, setConfig] = useState<{ urls: { name: string; url: string }[] } | null>(null)
   const [document, setDocument] = useState<OpenAPI.Document | null>(null)
-  const [currentServiceUrl, setCurrentServiceUrl] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -37,13 +35,15 @@ export function useSwagger(options?: UseSwaggerOptions) {
     setConfig(null)
     try {
       const response = await request(configUrl)
-      if (!response.ok) return
+      // if (!response.ok) return
       const res = await response.json()
 
-      console.log('init config: ', res)
+      console.log('init config: ', options?.apiDomain)
       setConfig(res)
-      if (res.urls?.length) await loadDoc(res.urls[0].url)
+      const fullUrl = `${options?.apiDomain ?? ''}${res.urls?.[0].url}`
+      if (res.urls?.length) await loadDoc(fullUrl)
     } catch (err: any) {
+      console.error('配置加载失败:', err)
       setError('配置加载失败')
       setConfig(null)
     } finally {
@@ -52,18 +52,19 @@ export function useSwagger(options?: UseSwaggerOptions) {
   }
 
   // 加载具体的 Swagger JSON 文档
-  const loadDoc = async (url: string) => {
+  const loadDoc = async (fullUrl: string) => {
     setLoading(true)
-    setCurrentServiceUrl(url)
+    // setCurrentServiceUrl(fullUrl)
+    setDocument(null)
     try {
-      const apiDomain =
-        typeof options?.apiDomain === 'function' ? options!.apiDomain() : options?.apiDomain ?? ''
-      const response = await request(apiDomain + url)
+      const response = await request(fullUrl)
       if (!response.ok) return
       const res = await response.json()
       setDocument(res)
     } catch (err: any) {
+      console.error('文档加载失败:', err)
       setError('文档加载失败')
+      setDocument(null)
     } finally {
       setLoading(false)
     }
@@ -95,6 +96,7 @@ export function useSwagger(options?: UseSwaggerOptions) {
   const filteredGroupedApis = useMemo(() => {
     if (!document?.paths) return {}
     const groups: Record<string, {
+      key: string;
       path: string;
       method: string;
       matchType: string;
@@ -120,6 +122,7 @@ export function useSwagger(options?: UseSwaggerOptions) {
           if (!groups[tag]) groups[tag] = []
           groups[tag].push({
             path,
+            key: `${method}${path}`,
             method: method.toUpperCase(),
             matchType: query ? matchType : '',
             ...op,
@@ -134,7 +137,6 @@ export function useSwagger(options?: UseSwaggerOptions) {
   return {
     config,
     document,
-    currentServiceUrl,
     loading,
     error,
     searchQuery,

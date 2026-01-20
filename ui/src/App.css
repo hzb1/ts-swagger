@@ -10,6 +10,7 @@
     justify-content: space-between;
     align-items: center;
     line-height: 1em;
+    padding: 0 16px;
 
     .logo-warp {
         display: flex;
@@ -75,7 +76,11 @@ pre code.hljs{
 }
 
 .api-detail-info{
-    margin-bottom: 16px;
+    position: sticky;
+    z-index: 111;
+    top: 0;
+    background-color: white;
+    padding-bottom: 16px;
     .api-info{
         margin-top: 8px;
         display: flex;
@@ -87,4 +92,10 @@ pre code.hljs{
             font-size: 16px;
         }
     }
+}
+
+.left-main{
+    height: 100%;
+    overflow: auto;
+    position: relative;
 }
