@@ -22,6 +22,10 @@ const ipOptions = ref<
   }[]
 >([
   {
+    label: 'lin',
+    value: 'http://172.16.7.22:9999',
+  },
+  {
     label: 'nong',
     value: 'http://172.16.7.149:9999',
   },
@@ -40,7 +44,7 @@ const ipOptions = ref<
  * 例如: http://localhost:9966
  * 例如: http://172.16.13.93:9000
  */
-const ip = ref(ipOptions.value[2].value)
+const ip = ref(ipOptions.value[3].value)
 
 const version = ref<'v2' | 'v3'>('v3')
 const selectedApi = ref<SwaggerApi | null>(null)
@@ -52,11 +56,12 @@ function getBaseUrl(ip: string) {
   return url
 }
 
+const currentServiceUrl = ref('')
+
 // 1. 调用 Swagger 业务逻辑
 const {
   config,
   document,
-  currentServiceUrl,
   loading,
   searchQuery,
   searchHistory,
@@ -65,6 +70,7 @@ const {
   loadDoc,
   saveHistory,
   clearHistory,
+  serviceOptions,
 } = useSwagger({
   apiDomain: ip,
 })
@@ -135,10 +141,13 @@ const handleSelectApi = (api: any) => {
 }
 
 // 切换服务时的处理
-const handleServiceChange = async (url: string) => {
-  await loadDoc(url)
+const handleServiceChange = async (ev: Event) => {
+  const value = ev?.target?.value as string
+  currentServiceUrl.value = value
+  const fullUrl = `${getBaseUrl(ip.value)}${value}`
+  await loadDoc(fullUrl)
   selectedApi.value = null // 切换服务清空选中
-  updateUrl(url)
+  updateUrl(fullUrl)
 }
 
 const highlight = (code: string) => hljs.highlight(code, { language: 'typescript' }).value
@@ -155,35 +164,22 @@ const copyFullFile = () => {
 </script>
 
 <template>
-  <div class="home-view flex flex-col h-screen bg[#fafafa]">
-    <header class="h-16 bg-white border-b border-[#e0e0e0] flex items-center px-6 gap-6">
-      <div class="font-medium text-[18px] text-[#1a1a1a]">TS Swagger UI</div>
-      <div class="flex-1 flex items-center justify-center gap-2">
-        <input
-          type="text"
-          class="w-80 h-8 px-3 border border-[#d0d0d0] rounded-md text-sm focus:outline-none focus:border-[#0066cc] bg-white"
-          v-model="ip"
-        />
-        <button
-          class="w-[120px] h-8 bg-[#0066cc] text-white text-sm rounded-md hover:bg-[#0052a3] transition-colors"
-          @click="loadSwagger"
+  <div class="home-view flex h-screen bg[#fafafa]">
+    <aside class="w-[320px] bg-white border-r border-[#e0e0e0] flex flex-col shrink-0">
+      <div class="w-full h-[100] flex items-center justify-center">
+        <label for="service-select" class="text-[14px] text-[#1a1a1a]">服务</label>
+        <select
+          id="service-select"
+          :value="currentServiceUrl"
+          @change="handleServiceChange"
+          class="select"
         >
-          加载 Swagger
-        </button>
+          <option v-for="item in serviceOptions" :key="item.value" :value="item.value">
+            {{ item.label }}
+          </option>
+        </select>
       </div>
-      <div class="flex items-center gap-2">
-        <div
-          class="flex items-center gap-2 px-3 h-8 bg-[#e8f5e9] text-[#2e7d32] text-sm rounded-md border border-[#a5d6a7]"
-        >
-          <div class="w-2 h-2 rounded-full bg-[#2e7d32]"></div>
-          Plugin Enabled
-        </div>
-      </div>
-    </header>
-    <div class="flex flex-1 overflow-hidden">
-      <aside
-        class="w-[320px] bg-white border-r border-[#e0e0e0] flex flex-col overflow-y-auto shrink-0"
-      >
+      <div class="overflow-y-auto">
         <div class="flex-1" v-if="!loading">
           <div
             class="border-b border-[#e0e0e0]"
@@ -229,7 +225,33 @@ const copyFullFile = () => {
           </div>
         </div>
         <div class="" v-else>加载中...</div>
-      </aside>
+      </div>
+    </aside>
+    <div class="flex flex-1 flex-col overflow-hidden">
+      <header class="h-16 bg-white border-b border-[#e0e0e0] flex items-center px-6 gap-6">
+        <div class="font-medium text-[18px] text-[#1a1a1a]">TS Swagger UI</div>
+        <div class="flex-1 flex items-center justify-center gap-2">
+          <input
+            type="text"
+            class="w-80 h-8 px-3 border border-[#d0d0d0] rounded-md text-sm focus:outline-none focus:border-[#0066cc] bg-white"
+            v-model="ip"
+          />
+          <button
+            class="w-[120px] h-8 bg-[#0066cc] text-white text-sm rounded-md hover:bg-[#0052a3] transition-colors"
+            @click="loadSwagger"
+          >
+            加载 Swagger
+          </button>
+        </div>
+        <div class="flex items-center gap-2">
+          <div
+            class="flex items-center gap-2 px-3 h-8 bg-[#e8f5e9] text-[#2e7d32] text-sm rounded-md border border-[#a5d6a7]"
+          >
+            <div class="w-2 h-2 rounded-full bg-[#2e7d32]"></div>
+            Plugin Enabled
+          </div>
+        </div>
+      </header>
       <main class="flex-1 overflow-y-auto bg-[#fafafa]">
         <div class="p-8" v-if="selectedApi">
           <div class="bg-white rounded-md border border-[#e0e0e0] p-6 mb-6">

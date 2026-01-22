@@ -11,7 +11,6 @@ type UseSwaggerOptions = {
 export function useSwagger(options?: UseSwaggerOptions) {
   const config = ref<{ urls: { name: string; url: string }[] } | null>(null)
   const document = ref<OpenAPI.Document | null>(null)
-  const currentServiceUrl = ref('')
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -37,28 +36,33 @@ export function useSwagger(options?: UseSwaggerOptions) {
 
       console.log('init config: ', res)
       config.value = res
-      if (res.urls?.length) await loadDoc(res.urls[0].url)
+      // 默认使用第一个服务
+      const fullUrl = unref(options?.apiDomain) + res.urls[0].url
+      if (res.urls?.length) await loadDoc(fullUrl)
     } catch (err: any) {
       error.value = '配置加载失败'
-
+      console.error('init config error: ', err)
       config.value = null
+      document.value = null
     } finally {
       loading.value = false
     }
   }
 
   // 加载具体的 Swagger JSON 文档
-  const loadDoc = async (url: string) => {
+  const loadDoc = async (fullUrl: string) => {
     loading.value = true
-    currentServiceUrl.value = url
+    // currentServiceUrl.value = fullUrl
+    // debugger
     try {
-      const apiDomain = unref(options?.apiDomain)
-      const response = await request(apiDomain + url)
+      const response = await request(fullUrl)
       if (!response.ok) return
       const res = await response.json()
       document.value = res
     } catch (err: any) {
       error.value = '文档加载失败'
+      console.error('load doc error: ', err)
+      document.value = null
     } finally {
       loading.value = false
     }
@@ -117,10 +121,16 @@ export function useSwagger(options?: UseSwaggerOptions) {
     return groups
   })
 
+  const serviceOptions = computed(() => {
+    return config.value?.urls?.map((item) => ({
+      label: item.name,
+      value: item.url,
+    })) || []
+  })
+
   return {
     config,
     document,
-    currentServiceUrl,
     loading,
     error,
     searchQuery,
@@ -130,5 +140,6 @@ export function useSwagger(options?: UseSwaggerOptions) {
     loadDoc,
     saveHistory,
     clearHistory,
+    serviceOptions,
   }
 }

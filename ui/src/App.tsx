@@ -200,7 +200,6 @@ const App: React.FC = () => {
   const handleServiceChange = useCallback((serviceUrl: string) => {
     setCurrentServiceUrl(serviceUrl)
     const fullUrl = `${ip}${serviceUrl}`
-    debugger;
     updateUrl(serviceUrl)
     loadDoc(fullUrl).then(() => {
       // 切换服务清空选中
