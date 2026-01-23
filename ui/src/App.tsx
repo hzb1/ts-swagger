@@ -1,8 +1,7 @@
-import React, {useCallback, useEffect, useEffectEvent, useMemo, useState} from 'react'
+import React, {useCallback, useEffect, useMemo, useState} from 'react'
 import {
   AutoComplete,
   Input,
-  type AutoCompleteProps,
   type MenuProps,
   Card,
   message,
@@ -12,7 +11,7 @@ import {
   Spin,
   Tag, Empty
 } from 'antd';
-import {Breadcrumb, Layout, Menu, theme} from 'antd';
+import {Breadcrumb, Layout, theme} from 'antd';
 import './App.css'
 import {useSwagger} from "./hooks/useSwagger.ts";
 import {useOptions} from "./hooks/useOptions.ts";
@@ -39,16 +38,9 @@ interface SwaggerApi {
   method: string
   summary?: string
   parameters?: SwaggerParameter[]
-  requestBody?: any
+  requestBody?: never
 }
 
-const swaggerConfigUrl = '/api-docs/swagger-config'
-
-function getBaseUrl(ip: string) {
-  let url = ip.trim()
-  if (!/^https?:\/\//.test(url)) url = 'http://' + url
-  return url
-}
 
 const App: React.FC = () => {
   const {
@@ -60,7 +52,7 @@ const App: React.FC = () => {
 
   const [selectedApi, setSelectedApi] = useState<SwaggerApi>()
 
-  const [options, setOptions] = useState<AutoCompleteProps['options']>([
+  const [options] = useState([
     {
       label: 'lin',
       value: 'http://172.16.7.22:9999',
@@ -85,17 +77,11 @@ const App: React.FC = () => {
    * 例如: http://localhost:9966
    * 例如: http://172.16.13.93:9000
    */
-  const [ip, setIp] = useState<string>(options?.[0].value)
+  const [ip, setIp] = useState<string>(options[0].value!)
 
   const onIpChange = (value: string) => {
     console.log('onIpChange', value)
     setIp(value?.trim())
-  }
-
-  const handleSearch = (value: string) => {
-    const nextIp = value?.trim()
-    console.log('搜索', {ip, version, nextIp})
-    loadSwagger({ip: nextIp, version})
   }
   const [currentServiceUrl, setCurrentServiceUrl] = useState('')
 
@@ -103,43 +89,53 @@ const App: React.FC = () => {
   const {
     config,
     document,
-    loading,
+    configLoading,
+    docLoading,
     searchQuery,
     setSearchQuery,
-    searchHistory,
     filteredGroupedApis,
-    init,
-    loadDoc,
-    saveHistory,
-    clearHistory,
+    onLoadDocument,
+    loadData,
   } = useSwagger({
-    apiDomain: ip,
+    onConfigLoaded: (config) => {
+      if (!currentServiceUrl) {
+        setCurrentServiceUrl(config.urls[0].url)
+      }
+    },
   })
 
 // 2. 调用配置持久化逻辑
-  const {configState, generatorOptions, resetTemplate} = useOptions()
+  const {generatorOptions} = useOptions()
 
-  const [version, setVersion] = useState('v3')
+  const [version] = useState('v3')
 
-  const loadSwagger = async ({ip, version}: {ip: string, version: string}) => {
+  const loadSwagger = useCallback(({ip, version}: {ip: string, version?: string}) => {
     if (!ip) {
       messageApi.error('请输入 IP 地址')
       return
     }
-    console.log({ip, version})
     try {
-      const baseUrl = getBaseUrl(ip)
-      const configUrl = `${baseUrl}/${version}${swaggerConfigUrl}`
-      await init(configUrl)
+      loadData({
+        ip,
+        version,
+      })
     } catch (error) {
       console.error('加载 Swagger 失败:', error)
     }
-  }
+  }, [loadData, messageApi])
 
   useEffect(() => {
     console.log('on useEffect loadSwagger')
-    loadSwagger({ip, version})
+    loadSwagger({ip})
   }, [])
+
+
+
+  const handleSearch = useCallback((value: string) => {
+    const nextIp = value?.trim()
+    console.log('搜索', {ip, version, nextIp})
+    loadSwagger({ip: nextIp, version})
+  }, [ip, version, loadSwagger])
 
 
   /**
@@ -149,6 +145,7 @@ const App: React.FC = () => {
     const {key} = data;
     // 通过key 找出selectedApi
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const apiList = Object.entries(filteredGroupedApis).map(([_tag, apis]) => apis)
 
     let findApi;
@@ -191,7 +188,7 @@ const App: React.FC = () => {
   }
 
   const handleCopy = async (content?: string) => {
-    const b = await copyToClipboard(content)
+    const b = await copyToClipboard(content!)
     if (b) {
       messageApi.success('已复制');
     }
@@ -200,12 +197,12 @@ const App: React.FC = () => {
   const handleServiceChange = useCallback((serviceUrl: string) => {
     setCurrentServiceUrl(serviceUrl)
     const fullUrl = `${ip}${serviceUrl}`
-    updateUrl(serviceUrl)
-    loadDoc(fullUrl).then(() => {
+    onLoadDocument(fullUrl).then(() => {
       // 切换服务清空选中
-      setSelectedApi(undefined)
+      // setSelectedApi(undefined)
+      updateUrl(serviceUrl)
     })
-  }, [ip, loadDoc, setCurrentServiceUrl])
+  }, [ip, onLoadDocument])
 
   const serviceOptions = useMemo(() => {
     return config?.urls.map((item) => ({
@@ -231,14 +228,16 @@ const App: React.FC = () => {
               <Select
                 value={currentServiceUrl}
                 style={{width: 180}}
-                loading={loading}
+                loading={configLoading}
                 onChange={handleServiceChange}
                 options={serviceOptions}
               />
             </div>
             <SearchBar value={searchQuery} onChange={setSearchQuery}/>
-            <Spin spinning={loading} wrapperClassName={'api-list-wrapper'}>
-              <ApiList apis={apiGroups} onSelect={onMenuSelect}/>
+            <Spin spinning={docLoading} wrapperClassName={'api-list-wrapper'}>
+              {
+                apiGroups?.length ? <ApiList apis={apiGroups} onSelect={onMenuSelect}/> : <Empty description={'暂无 API 接口'}/>
+              }
             </Spin>
           </div>
         </Sider>
