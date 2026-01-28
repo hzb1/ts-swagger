@@ -5,13 +5,6 @@ import type {
 } from '../extension/src/shared/types'
 
 /* ----------------------------------
- * 内部状态
- * ---------------------------------- */
-
-let pluginEnabled: boolean | null = null
-let pluginChecking: Promise<boolean> | null = null
-
-/* ----------------------------------
  * 工具函数
  * ---------------------------------- */
 
@@ -31,38 +24,66 @@ function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
 }
 
 /* ----------------------------------
- * 插件可用性检测（只检测一次）
+ * 插件可用性检测
  * ---------------------------------- */
 
-export function checkPluginEnabled(timeout = 500): Promise<boolean> {
-  if (pluginEnabled !== null) return Promise.resolve(pluginEnabled)
-  if (pluginChecking) return pluginChecking
 
-  pluginChecking = new Promise((resolve) => {
-    function handler(e: MessageEvent) {
+let pluginChecking: {
+  promise: Promise<boolean>
+  cancel: () => void
+} | null = null
+
+export function checkPluginEnabled(timeout = 1000): Promise<boolean> {
+  // 如果正在检测，直接复用同一次检测
+  if (pluginChecking) {
+    return pluginChecking.promise
+  }
+
+  let finished = false
+  let timer: number | null = null
+
+  const promise = new Promise<boolean>((resolve) => {
+    function cleanup() {
+      if (finished) return
+      finished = true
+
+      window.removeEventListener('message', onMessage)
+
+      if (timer !== null) {
+        clearTimeout(timer)
+        timer = null
+      }
+
+      pluginChecking = null
+    }
+
+    function onMessage(e: MessageEvent) {
       if (e.data?.type === 'PLUGIN_PONG') {
         cleanup()
-        pluginEnabled = true
         resolve(true)
       }
     }
 
-    function cleanup() {
-      window.removeEventListener('message', handler)
-      pluginChecking = null
-    }
-
-    window.addEventListener('message', handler)
+    window.addEventListener('message', onMessage)
     window.postMessage({ type: 'PLUGIN_PING' }, '*')
 
-    setTimeout(() => {
+    timer = window.setTimeout(() => {
       cleanup()
-      pluginEnabled = null
       resolve(false)
     }, timeout)
   })
 
-  return pluginChecking
+  pluginChecking = {
+    promise,
+    cancel() {
+      if (!finished) {
+        finished = true
+        pluginChecking = null
+      }
+    },
+  }
+
+  return promise
 }
 
 /* ----------------------------------
@@ -83,7 +104,7 @@ async function proxyFetchRaw(
 
   const payload: RequestSpec = {
     url,
-    method: init?.method || 'GET',
+    method: (init?.method || 'GET'),
     headers: normalizeHeaders(init?.headers),
     body: init?.body ? { type: 'text', value: String(init.body) } : undefined,
   }
@@ -134,18 +155,22 @@ async function proxyFetchRaw(
  * Response-like 封装
  * ---------------------------------- */
 
+type ProxyResponseRaw = {
+  status: number
+  statusText: string
+  headers: Record<string, string>
+  bodyText: string
+  bodyType: 'json' | 'text'
+}
+
 class ProxyResponse {
   private _bodyUsed = false
 
-  constructor(
-    private raw: {
-      status: number
-      statusText: string
-      headers: Record<string, string>
-      bodyText: string
-      bodyType: 'json' | 'text'
-    },
-  ) {}
+  private raw:  ProxyResponseRaw
+
+  constructor(raw: ProxyResponseRaw ) {
+    this.raw = raw;
+  }
 
   get ok() {
     return this.raw.status >= 200 && this.raw.status < 300

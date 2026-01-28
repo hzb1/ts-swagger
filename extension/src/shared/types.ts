@@ -16,7 +16,7 @@ export interface ProxyRequestMessage {
 
 export interface RequestSpec {
   url: string
-  method: HttpMethod
+  method: HttpMethod | string
   headers?: Record<string, string>
   body?: RequestBody
   timeout?: number

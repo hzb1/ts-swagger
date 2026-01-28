@@ -2,7 +2,6 @@ import React, {useCallback, useEffect, useMemo, useState} from 'react'
 import {
   AutoComplete,
   Input,
-  type MenuProps,
   Card,
   message,
   Row,
@@ -12,45 +11,33 @@ import {
   Tag, Empty
 } from 'antd';
 import {Breadcrumb, Layout, theme} from 'antd';
-import './App.css'
-import {useSwagger} from "./hooks/useSwagger.ts";
-import {useOptions} from "./hooks/useOptions.ts";
-import CodeHighlighting from "./components/ui/CodeHighlighting/CodeHighlighting.tsx";
-import {SwaggerToTS} from '../../utils/SwaggerParser.ts'
-import copyToClipboard from '../../utils/copyToClipboard/copyToClipboard.ts'
-import CopyIcon from "./components/CopyIcon.tsx";
-import SearchBar from "./components/ui/SearchBar/SearchBar.tsx";
-import ApiList from "./components/ApiList/ApiList.tsx";
-import Method from "./components/ui/Method/Method.tsx";
-import {CheckCircleOutlined} from "@ant-design/icons";
+import './Home.css'
+import {useSwagger} from "../../hooks/useSwagger.ts";
+import {useOptions} from "../../hooks/useOptions.ts";
+import CodeHighlighting from "../../components/ui/CodeHighlighting/CodeHighlighting.tsx";
+import {SwaggerToTS} from '../../../../utils/SwaggerParser.ts'
+import copyToClipboard from '../../../../utils/copyToClipboard/copyToClipboard.ts'
+import CopyIcon from "../../components/CopyIcon.tsx";
+import SearchBar from "../../components/ui/SearchBar/SearchBar.tsx";
+import ApiList from "../../components/ApiList/ApiList.tsx";
+import Method from "../../components/ui/Method/Method.tsx";
+import {CheckCircleOutlined, LoadingOutlined, WarningOutlined} from "@ant-design/icons";
+import {usePluginEnabled} from "../../hooks/usePluginEnabled.ts";
+import { useSearchParams} from "react-router";
+import type {SwaggerApi} from "./utils.ts";
 
-const {Header, Content, Sider } = Layout;
-
-interface SwaggerParameter {
-  name: string
-  in: 'query' | 'path' | 'header' | 'cookie'
-  required: boolean
-  schema?: { type: string }
-}
-
-interface SwaggerApi {
-  path: string
-  method: string
-  summary?: string
-  parameters?: SwaggerParameter[]
-  requestBody?: never
-}
+const {Header, Content, Sider} = Layout;
 
 
-const App: React.FC = () => {
+
+const Home: React.FC = () => {
   const {
     token: {colorBgContainer, borderRadiusLG},
   } = theme.useToken();
 
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const [messageApi, contextHolder] = message.useMessage();
-
-
-  const [selectedApi, setSelectedApi] = useState<SwaggerApi>()
 
   const [options] = useState([
     {
@@ -62,8 +49,16 @@ const App: React.FC = () => {
       value: 'http://172.16.7.149:9999',
     },
     {
+      label: 'huang',
+      value: 'http://172.16.7.21:9999',
+    },
+    {
       label: 'localhost:9966',
       value: 'http://localhost:9966',
+    },
+    {
+      label: 'localhost:huang',
+      value: 'http://localhost:9966/huang',
     },
     {
       label: 'www.lgsoar.cn',
@@ -71,24 +66,10 @@ const App: React.FC = () => {
     },
   ])
 
-
-  /**
-   * Swagger 服务 IP 地址
-   * 例如: http://localhost:9966
-   * 例如: http://172.16.13.93:9000
-   */
-  const [ip, setIp] = useState<string>(options[0].value!)
-
-  const onIpChange = (value: string) => {
-    console.log('onIpChange', value)
-    setIp(value?.trim())
-  }
-  const [currentServiceUrl, setCurrentServiceUrl] = useState('')
-
-  // 1. 调用 Swagger 业务逻辑
+  // 调用 Swagger 业务逻辑
   const {
-    config,
-    document,
+    configData,
+    documentData,
     configLoading,
     docLoading,
     searchQuery,
@@ -97,19 +78,41 @@ const App: React.FC = () => {
     onLoadDocument,
     loadData,
   } = useSwagger({
-    onConfigLoaded: (config) => {
+    // 配置加载完成时的回调
+    onConfigLoaded: (configData) => {
       if (!currentServiceUrl) {
-        setCurrentServiceUrl(config.urls[0].url)
+        setCurrentServiceUrl(configData?.urls[0].url)
       }
+    },
+    // 文档加载完成时的回调
+    onDocumentLoaded: () => {
     },
   })
 
 // 2. 调用配置持久化逻辑
   const {generatorOptions} = useOptions()
 
+
+  /**
+   * Swagger 服务 IP 地址
+   * 例如: http://localhost:9966
+   * 例如: http://172.16.13.93:9000
+   */
+  const [ip, setIp] = useState<string>(searchParams.get('ip') ?? options[0].value!)
+
+  const onIpChange = (value: string) => {
+    setIp(value?.trim())
+  }
+
+  const [currentServiceUrl, setCurrentServiceUrl] = useState(searchParams.get('service') ?? '')
+
+  const [selectedApi, setSelectedApi] = useState<SwaggerApi>()
+
+  const {pluginEnabled, checking} = usePluginEnabled()
+
   const [version] = useState('v3')
 
-  const loadSwagger = useCallback(({ip, version}: {ip: string, version?: string}) => {
+  const loadSwagger = useCallback(({ip, version}: { ip: string, version?: string }) => {
     if (!ip) {
       messageApi.error('请输入 IP 地址')
       return
@@ -130,7 +133,6 @@ const App: React.FC = () => {
   }, [])
 
 
-
   const handleSearch = useCallback((value: string) => {
     const nextIp = value?.trim()
     console.log('搜索', {ip, version, nextIp})
@@ -141,7 +143,7 @@ const App: React.FC = () => {
   /**
    * 菜单选择回调
    */
-  const onMenuSelect: MenuProps['onSelect'] = (data: { key: string }) => {
+  const onMenuSelect = useCallback((data: { key: string }) => {
     const {key} = data;
     // 通过key 找出selectedApi
 
@@ -157,12 +159,12 @@ const App: React.FC = () => {
       })
     })
     setSelectedApi(findApi)
-  };
+  }, [filteredGroupedApis]);
 
   const tsCodeParts = useMemo(() => {
-    if (!document || !selectedApi) return null
+    if (!documentData || !selectedApi) return null
     // 使用 useOptions 提供的 generatorOptions
-    const parser = new SwaggerToTS(document, generatorOptions)
+    const parser = new SwaggerToTS(documentData, generatorOptions)
     const res = parser.getStructuredTypes(selectedApi.path, selectedApi.method)
     return {
       'Request Function': res.requestFunction,
@@ -171,7 +173,7 @@ const App: React.FC = () => {
       'Request Body': res.requestBody,
       'Response Data': res.responseData,
     }
-  }, [document, generatorOptions, selectedApi])
+  }, [documentData, generatorOptions, selectedApi])
 
   // 更新 URL 参数 (不触发刷新)
   const updateUrl = (service: string, api?: SwaggerApi) => {
@@ -194,22 +196,22 @@ const App: React.FC = () => {
     }
   }
 
-  const handleServiceChange = useCallback((serviceUrl: string) => {
+  const handleServiceChange = (serviceUrl: string) => {
     setCurrentServiceUrl(serviceUrl)
+    // 切换服务 清空选中
+    setSelectedApi(undefined)
     const fullUrl = `${ip}${serviceUrl}`
     onLoadDocument(fullUrl).then(() => {
-      // 切换服务清空选中
-      // setSelectedApi(undefined)
       updateUrl(serviceUrl)
     })
-  }, [ip, onLoadDocument])
+  }
 
   const serviceOptions = useMemo(() => {
-    return config?.urls.map((item) => ({
+    return configData?.urls.map((item) => ({
       label: item.name,
       value: item.url,
-    }))
-  }, [config?.urls])
+    })) || []
+  }, [configData?.urls])
 
   const apiGroups = useMemo(() => {
     return Object.entries(filteredGroupedApis).map(([tag, apis]) => ({
@@ -236,7 +238,8 @@ const App: React.FC = () => {
             <SearchBar value={searchQuery} onChange={setSearchQuery}/>
             <Spin spinning={docLoading} wrapperClassName={'api-list-wrapper'}>
               {
-                apiGroups?.length ? <ApiList apis={apiGroups} onSelect={onMenuSelect}/> : <Empty description={'暂无 API 接口'}/>
+                apiGroups?.length ? <ApiList apis={apiGroups} onSelect={onMenuSelect}/> :
+                  <Empty description={'暂无 API 接口'}/>
               }
             </Spin>
           </div>
@@ -261,7 +264,16 @@ const App: React.FC = () => {
             </div>
 
             <div>
-              <Tag color="success" variant={'solid'} icon={<CheckCircleOutlined />} >已连接</Tag>
+              {
+                checking ? <Tag color="success" variant={'solid'} icon={<LoadingOutlined/>}>检查中</Tag> : (
+                  pluginEnabled ? (
+                    <Tag color="success" variant={'solid'} icon={<CheckCircleOutlined/>}>已连接</Tag>
+                  ) : (
+                    <Tag color="error" variant={'solid'} icon={<WarningOutlined />}>未连接</Tag>
+                  )
+                )
+              }
+
             </div>
 
           </Header>
@@ -292,7 +304,7 @@ const App: React.FC = () => {
                           {/*<button className="copy-all-btn" onClick={() => handleCopy(tsCodeParts?.['Request Function'])}>复制全量代码</button>*/}
                         </div>
                         <div className="api-info">
-                          <Method method={selectedApi?.method} className={'method'} />
+                          <Method method={selectedApi?.method} className={'method'}/>
                           <span className="path">{selectedApi?.path}</span>
                         </div>
                       </div>
@@ -350,4 +362,4 @@ const App: React.FC = () => {
   )
 }
 
-export default App
+export default Home

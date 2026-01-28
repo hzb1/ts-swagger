@@ -6,6 +6,8 @@ const swaggerConfigUrl = '/api-docs/swagger-config'
 type UseSwaggerOptions = {
   // 在获取 Swagger 配置后触发
   onConfigLoaded?: (config: { urls: { name: string; url: string }[] }) => void
+  // 在获取 Swagger JSON 文档后触发
+  onDocumentLoaded?: (document: OpenAPI.Document) => void
 }
 
 function getBaseUrl(ip: string) {
@@ -169,8 +171,8 @@ export function useSwagger(options?: UseSwaggerOptions) {
   }, [document, searchQuery])
 
   return {
-    config,
-    document,
+    configData: config,
+    documentData: document,
     configLoading,
     docLoading,
     error,
