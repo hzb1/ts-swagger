@@ -24,6 +24,7 @@ import {useSearchParams} from "react-router";
 import type {SwaggerApi} from "./utils.ts";
 import SideBar from "../../components/sidebar/SideBar.tsx";
 import ApiInfo from "../../components/api-info/ApiInfo.tsx";
+import CodeCard from "../../components/code-card/CodeCard.tsx";
 
 const {Header, Content, Sider} = Layout;
 
@@ -312,20 +313,19 @@ const Home: React.FC = () => {
                     </Col>
 
                     <Col span={12} style={{height: '100%'}}>
-                      <Card title="Models" extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.Models)}/>}
-                            style={{
-                              display: 'flex',
-                              flexDirection: 'column',
-                              height: '100%',
-                            }} styles={{
+                      <CodeCard title="Models" code={tsCodeParts?.Models}
+                                style={{
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  height: '100%',
+                                }} styles={{
                         body: {
                           flex: 1,
                           overflow: 'auto',
                           padding: 0,
                         }
                       }}>
-                        <CodeHighlighting code={tsCodeParts?.Models}/>
-                      </Card>
+                      </CodeCard>
                     </Col>
 
                   </Row>
