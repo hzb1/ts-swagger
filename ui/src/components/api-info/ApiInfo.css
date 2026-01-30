@@ -1,0 +1,5 @@
+
+.border-standard{
+    border-width: 1px;
+    border-color: rgb(var(--gray-200) / .7);
+}

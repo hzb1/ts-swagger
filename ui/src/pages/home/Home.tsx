@@ -18,16 +18,14 @@ import CodeHighlighting from "../../components/ui/CodeHighlighting/CodeHighlight
 import {SwaggerToTS} from '../../../../utils/SwaggerParser.ts'
 import copyToClipboard from '../../../../utils/copyToClipboard/copyToClipboard.ts'
 import CopyIcon from "../../components/CopyIcon.tsx";
-import SearchBar from "../../components/ui/SearchBar/SearchBar.tsx";
-import ApiList from "../../components/ApiList/ApiList.tsx";
-import Method from "../../components/ui/Method/Method.tsx";
 import {CheckCircleOutlined, LoadingOutlined, WarningOutlined} from "@ant-design/icons";
 import {usePluginEnabled} from "../../hooks/usePluginEnabled.ts";
-import { useSearchParams} from "react-router";
+import {useSearchParams} from "react-router";
 import type {SwaggerApi} from "./utils.ts";
+import SideBar from "../../components/sidebar/SideBar.tsx";
+import ApiInfo from "../../components/api-info/ApiInfo.tsx";
 
 const {Header, Content, Sider} = Layout;
-
 
 
 const Home: React.FC = () => {
@@ -98,10 +96,16 @@ const Home: React.FC = () => {
    * 例如: http://localhost:9966
    * 例如: http://172.16.13.93:9000
    */
-  const [ip, setIp] = useState<string>(searchParams.get('ip') ?? options[0].value!)
+  const [ip, setIp] = useState<string>(searchParams.get('ip') ?? options[4].value!)
 
   const onIpChange = (value: string) => {
     setIp(value?.trim())
+
+    // 更新url
+    setSearchParams((prev) => ({
+      ...prev,
+      ip: value?.trim(),
+    }))
   }
 
   const [currentServiceUrl, setCurrentServiceUrl] = useState(searchParams.get('service') ?? '')
@@ -128,7 +132,9 @@ const Home: React.FC = () => {
   }, [loadData, messageApi])
 
   useEffect(() => {
-    console.log('on useEffect loadSwagger')
+// 获取全部参数并转换为对象
+    const allParams = Object.fromEntries(searchParams.entries());
+    console.warn('on useEffect loadSwagger', allParams)
     loadSwagger({ip})
   }, [])
 
@@ -175,20 +181,6 @@ const Home: React.FC = () => {
     }
   }, [documentData, generatorOptions, selectedApi])
 
-  // 更新 URL 参数 (不触发刷新)
-  const updateUrl = (service: string, api?: SwaggerApi) => {
-    const newUrl = new URL(window.location.href)
-    newUrl.searchParams.set('service', service)
-    if (api) {
-      newUrl.searchParams.set('path', api.path)
-      newUrl.searchParams.set('method', api.method)
-    } else {
-      newUrl.searchParams.delete('path')
-      newUrl.searchParams.delete('method')
-    }
-    window.history.replaceState({}, '', newUrl.toString())
-  }
-
   const handleCopy = async (content?: string) => {
     const b = await copyToClipboard(content!)
     if (b) {
@@ -202,7 +194,11 @@ const Home: React.FC = () => {
     setSelectedApi(undefined)
     const fullUrl = `${ip}${serviceUrl}`
     onLoadDocument(fullUrl).then(() => {
-      updateUrl(serviceUrl)
+      // 更新url
+      setSearchParams((prev) => ({
+        ...prev,
+        service: serviceUrl,
+      }))
     })
   }
 
@@ -223,122 +219,105 @@ const Home: React.FC = () => {
   return (
     <>
       {contextHolder}
-      <Layout className={'views'}>
-        <Sider width={280} style={{background: colorBgContainer}}>
-          <div className={'sidebar'}>
-            <div className={'service-select-wrapper'}>
-              <Select
-                value={currentServiceUrl}
-                style={{width: 180}}
-                loading={configLoading}
-                onChange={handleServiceChange}
-                options={serviceOptions}
-              />
-            </div>
-            <SearchBar value={searchQuery} onChange={setSearchQuery}/>
-            <Spin spinning={docLoading} wrapperClassName={'api-list-wrapper'}>
-              {
-                apiGroups?.length ? <ApiList apis={apiGroups} onSelect={onMenuSelect}/> :
-                  <Empty description={'暂无 API 接口'}/>
-              }
-            </Spin>
-          </div>
-        </Sider>
-
-        <Layout>
-          <Header className={'header-wrapper'} style={{display: 'flex', alignItems: 'justify-content-between'}}>
-
-            <div className={'search-wrapper'}>
-              <AutoComplete
-                value={ip}
-                onChange={onIpChange}
-                onSelect={handleSearch}
-                options={options}
-                style={{width: 280}}
-                placeholder={"输入 IP 地址 ( 例如: http://localhost:9966 )"}
-                showSearch={{onSearch: handleSearch}}
-              >
-                <Input.Search placeholder="input here" enterButton/>
-              </AutoComplete>
-
-            </div>
-
-            <div>
-              {
-                checking ? <Tag color="success" variant={'solid'} icon={<LoadingOutlined/>}>检查中</Tag> : (
-                  pluginEnabled ? (
-                    <Tag color="success" variant={'solid'} icon={<CheckCircleOutlined/>}>已连接</Tag>
-                  ) : (
-                    <Tag color="error" variant={'solid'} icon={<WarningOutlined />}>未连接</Tag>
-                  )
-                )
-              }
-
-            </div>
-
-          </Header>
-          <Layout className={'content-wrapper'}>
-            <Breadcrumb
-              items={[{title: 'Home'}, {title: 'List'}, {title: 'App'}]}
-              className={'breadcrumb'}
+      <Spin spinning={configLoading || docLoading}>
+        <Layout className={'views'}>
+          <Sider width={304} style={{background: colorBgContainer}}>
+            <SideBar
+              currentServiceUrl={currentServiceUrl}
+              onCurrentServiceUrlChange={handleServiceChange}
+              configLoading={configLoading}
+              serviceOptions={serviceOptions}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              docLoading={docLoading}
+              apiGroups={apiGroups}
+              onMenuSelect={onMenuSelect}
             />
-            <Content
-              style={{
-                padding: 16,
-                margin: 0,
-                minHeight: 280,
-                background: colorBgContainer,
-                borderRadius: borderRadiusLG,
-              }}
-              className={'content-container'}
-            >
+          </Sider>
+
+          <Layout className={'flex flex-col h-full'}>
+            <Header className={'header-wrapper'} style={{display: 'flex', alignItems: 'justify-content-between'}}>
+
+              <div className={'search-wrapper'}>
+                <AutoComplete
+                  value={ip}
+                  onChange={onIpChange}
+                  onSelect={handleSearch}
+                  options={options}
+                  style={{width: 304}}
+                  placeholder={"输入 IP 地址 ( 例如: http://localhost:9966 )"}
+                  showSearch={{onSearch: handleSearch}}
+                >
+                  <Input.Search placeholder="input here" enterButton/>
+                </AutoComplete>
+
+              </div>
+
+              <div>
+                {
+                  checking ? <Tag color="success" variant={'solid'} icon={<LoadingOutlined/>}>检查中</Tag> : (
+                    pluginEnabled ? (
+                      <Tag color="success" variant={'solid'} icon={<CheckCircleOutlined/>}>已连接</Tag>
+                    ) : (
+                      <Tag color="error" variant={'solid'} icon={<WarningOutlined/>}>未连接</Tag>
+                    )
+                  )
+                }
+
+              </div>
+
+            </Header>
+            <Layout className={'content-wrapper overflow-y-auto'}>
               {
                 selectedApi ? (
                   <Row gutter={[16, 16]} style={{height: '100%'}}>
                     <Col span={12} className={'left-main'}>
 
+                      <ApiInfo api={selectedApi} codeMap={tsCodeParts}/>
 
-                      <div className="api-detail-info">
-                        <div className="title-row">
-                          <h2>{selectedApi?.summary}</h2>
-                          {/*<button className="copy-all-btn" onClick={() => handleCopy(tsCodeParts?.['Request Function'])}>复制全量代码</button>*/}
-                        </div>
-                        <div className="api-info">
-                          <Method method={selectedApi?.method} className={'method'}/>
-                          <span className="path">{selectedApi?.path}</span>
-                        </div>
-                      </div>
 
-                      <Row gutter={[16, 16]}>
-                        <Col span={24}>
-                          <Card title="Query Params"
-                                extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Query Params'])}/>}>
-                            <CodeHighlighting code={tsCodeParts?.["Query Params"]}/>
-                          </Card>
-                        </Col>
-                        <Col span={24}>
-                          <Card title="Request Body"
-                                extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Request Body'])}/>}>
-                            <CodeHighlighting code={tsCodeParts?.["Request Body"]}/>
-                          </Card>
-                        </Col>
+                      {/*<div className="api-detail-info">*/}
+                      {/*  <div className="title-row">*/}
+                      {/*    <h2>{selectedApi?.summary}</h2>*/}
+                      {/*    /!*<button className="copy-all-btn" onClick={() => handleCopy(tsCodeParts?.['Request Function'])}>复制全量代码</button>*!/*/}
+                      {/*  </div>*/}
+                      {/*  <div className="api-info">*/}
+                      {/*    <Method method={selectedApi?.method} className={'method'}/>*/}
+                      {/*    <span className="path">{selectedApi?.path}</span>*/}
+                      {/*  </div>*/}
+                      {/*</div>*/}
 
-                        <Col span={24}>
-                          <Card title="Response Data"
-                                extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Response Data'])}/>}>
-                            <CodeHighlighting code={tsCodeParts?.["Response Data"]}/>
-                          </Card>
-                        </Col>
-                      </Row>
+                      {/*<Row gutter={[16, 16]}>*/}
+                      {/*  <Col span={24}>*/}
+                      {/*    <Card title="Query Params"*/}
+                      {/*          extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Query Params'])}/>}>*/}
+                      {/*      <CodeHighlighting code={tsCodeParts?.["Query Params"]}/>*/}
+                      {/*    </Card>*/}
+                      {/*  </Col>*/}
+                      {/*  <Col span={24}>*/}
+                      {/*    <Card title="Request Body"*/}
+                      {/*          extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Request Body'])}/>}>*/}
+                      {/*      <CodeHighlighting code={tsCodeParts?.["Request Body"]}/>*/}
+                      {/*    </Card>*/}
+                      {/*  </Col>*/}
+
+                      {/*  <Col span={24}>*/}
+                      {/*    <Card title="Response Data"*/}
+                      {/*          extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.['Response Data'])}/>}>*/}
+                      {/*      <CodeHighlighting code={tsCodeParts?.["Response Data"]}/>*/}
+                      {/*    </Card>*/}
+                      {/*  </Col>*/}
+                      {/*</Row>*/}
 
                     </Col>
 
                     <Col span={12} style={{height: '100%'}}>
-                      <Card title="Models" extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.Models)}/>} style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        height: '100%',
-                      }} styles={{
+                      <Card title="Models" extra={<CopyIcon onClick={() => handleCopy(tsCodeParts?.Models)}/>}
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              height: '100%',
+                            }} styles={{
                         body: {
                           flex: 1,
                           overflow: 'auto',
@@ -354,10 +333,10 @@ const Home: React.FC = () => {
                   <Empty description={'请选择 API'}/>
                 )
               }
-            </Content>
+            </Layout>
           </Layout>
         </Layout>
-      </Layout>
+      </Spin>
     </>
   )
 }
