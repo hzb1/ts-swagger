@@ -12,11 +12,15 @@ type CodeCardProps = {
   };
 };
 
-const CodeCard = ({ title, code, style, styles }: CodeCardProps) => {
+const CodeCard: React.FC<CodeCardProps> = ({
+  title,
+  code,
+  style,
+  styles,
+}: CodeCardProps) => {
   const handleCopy = async () => {
     if (!code) return;
-
-    const b = await copyToClipboard(code);
+    await copyToClipboard(code);
     // if (b) {
     //   messageApi.success('已复制');
     // }

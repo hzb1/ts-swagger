@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { AutoComplete, Input, message, Row, Col, Spin, Tag, Empty } from "antd";
 import { Layout, theme } from "antd";
 import "./Home.css";
@@ -12,13 +19,16 @@ import {
 } from "@ant-design/icons";
 import { usePluginEnabled } from "../../hooks/usePluginEnabled.ts";
 import { useSearchParams } from "react-router";
-import SideBar from "../../components/sidebar/SideBar.tsx";
+import SideBar, {
+  type SideBarProps,
+} from "../../components/sidebar/SideBar.tsx";
 import ApiInfo from "../../components/api-info/ApiInfo.tsx";
 import CodeCard from "../../components/code-card/CodeCard.tsx";
 import type { ApiDetail } from "../../../types.ts";
-import type { ApiGroup } from "./utils.ts";
+import { OpenAPI } from "openapi-types";
+import { stableHash } from "../../utils/getApiSlug.ts";
 
-const { Header, Content, Sider } = Layout;
+const { Header, Sider } = Layout;
 
 const Home: React.FC = () => {
   const {
@@ -27,10 +37,10 @@ const Home: React.FC = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-  useEffect(() => {
-    const allParams = Object.fromEntries(searchParams.entries());
-    console.log("on useEffect: ", allParams);
-  }, [searchParams]);
+  // useEffect(() => {
+  //   const allParams = Object.fromEntries(searchParams.entries());
+  // console.log("on useEffect: ", allParams);
+  // }, [searchParams]);
 
   const [messageApi, contextHolder] = message.useMessage();
 
@@ -60,6 +70,8 @@ const Home: React.FC = () => {
       value: "https://www.lgsoar.cn/soar-api",
     },
   ]);
+
+  const firstLoadDocument = useRef(true);
 
   // 调用 Swagger 业务逻辑
   const {
@@ -134,6 +146,17 @@ const Home: React.FC = () => {
     return findApi;
   }, [filteredGroupedApis, selectedApiKey]);
 
+  // 展开索引
+  const [expanded, setExpanded] = useState<string[]>(() => {
+    const api = searchParams.get("api");
+    if (!api) return [];
+    return [];
+  });
+
+  const onExpandChange = (indexList: string[]) => {
+    setExpanded(indexList);
+  };
+
   const { pluginEnabled, checking } = usePluginEnabled();
 
   const [version] = useState("v3");
@@ -181,7 +204,7 @@ const Home: React.FC = () => {
   /**
    * 菜单选择回调
    */
-  const onMenuSelect = ({ key }: ApiDetail) => {
+  const onMenuSelect = (key: string) => {
     setSelectedApiKey(key);
     setSearchParams((prev) => {
       const newParams = new URLSearchParams(prev);
@@ -191,7 +214,7 @@ const Home: React.FC = () => {
   };
 
   const tsCodeParts = useMemo(() => {
-    if (!documentData || !selectedApi) return null;
+    if (!documentData || !selectedApi) return;
     // 使用 useOptions 提供的 generatorOptions
     const parser = new SwaggerToTS(documentData, generatorOptions);
     const res = parser.getStructuredTypes(selectedApi.path, selectedApi.method);
@@ -228,12 +251,43 @@ const Home: React.FC = () => {
     );
   }, [configData?.urls]);
 
-  const apiGroups: ApiGroup[] = useMemo(() => {
-    return Object.entries(filteredGroupedApis).map(([tag, apis]) => ({
-      name: tag,
-      children: apis,
-    }));
+  const apiGroups: SideBarProps["apis"] = useMemo(() => {
+    return Object.entries(filteredGroupedApis).map(([tag, apis]) => {
+      return {
+        id: stableHash(tag),
+        name: tag,
+        children: apis,
+      };
+    });
   }, [filteredGroupedApis]);
+
+  useEffect(() => {
+    const selectedApiKey = searchParams.get("api");
+
+    if (!selectedApiKey) return;
+
+    if (!firstLoadDocument.current || !documentData) {
+      return;
+    }
+    console.log(
+      "firstLoadDocument",
+      firstLoadDocument.current,
+      documentData,
+      apiGroups,
+    );
+
+    // 找出当前接口所在的分组
+    const currentGroup = apiGroups.find((group) =>
+      group.children.some((api) => api.key === selectedApiKey),
+    );
+    if (currentGroup) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExpanded([currentGroup.id]);
+    }
+    console.log("currentGroup", currentGroup);
+
+    firstLoadDocument.current = false;
+  }, [documentData, apiGroups, searchParams]);
 
   return (
     <>
@@ -249,15 +303,22 @@ const Home: React.FC = () => {
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
               docLoading={docLoading}
-              apiGroups={apiGroups}
-              onMenuSelect={onMenuSelect}
+              apis={apiGroups}
+              selectedKey={selectedApiKey}
+              onSelectKeyChange={onMenuSelect}
+              onExpandChange={onExpandChange}
+              expanded={expanded}
             />
           </Sider>
 
           <Layout className={"flex flex-col h-full"}>
             <Header
-              className={"header-wrapper"}
-              style={{ display: "flex", alignItems: "justify-content-between" }}
+              className={"header-wrapper border-b border-gray-950/5"}
+              style={{
+                display: "flex",
+                alignItems: "justify-content-between",
+                backgroundColor: colorBgContainer,
+              }}
             >
               <div className={"search-wrapper"}>
                 <AutoComplete

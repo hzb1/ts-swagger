@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { OpenAPI } from "openapi-types";
 import { request } from "../../../utils/proxySdk.ts";
 import type { ApiDetail } from "../../types.ts";
 import { getApiSlug } from "../utils/getApiSlug.ts";
+
 const swaggerConfigUrl = "/api-docs/swagger-config";
 
 type UseSwaggerOptions = {
@@ -26,6 +27,8 @@ export function useSwagger(options?: UseSwaggerOptions) {
   const [configLoading, setConfigLoading] = useState(false);
   const [docLoading, setDocLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 第一次加载
+  const firstLoadDocument = useRef(true);
 
   // 搜索相关
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,9 +75,10 @@ export function useSwagger(options?: UseSwaggerOptions) {
     setDocument(null);
     try {
       const response = await request(fullUrl);
-      if (!response.ok) return;
+      if (!response.ok) return Promise.reject();
       const res = await response.json();
       setDocument(res);
+      firstLoadDocument.current = false;
     } catch (err) {
       console.error("文档加载失败:", err);
       setError("文档加载失败");
@@ -193,5 +197,6 @@ export function useSwagger(options?: UseSwaggerOptions) {
     onLoadDocument,
     saveHistory,
     clearHistory,
+    firstLoadDocument,
   };
 }

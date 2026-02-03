@@ -1,16 +1,15 @@
 import "./SideBar.css";
 import { Empty, Select } from "antd";
 import SearchBar from "../ui/SearchBar/SearchBar.tsx";
-import type { ApiGroup } from "../../pages/home/utils.ts";
-import ApiList from "../ApiList/ApiList.tsx";
-import type { ApiDetail } from "../../../types.ts";
+import ApiList, { type ApiListProps } from "../ApiList/ApiList.tsx";
+import React from "react";
 
 type Option = {
   label: string;
   value: string;
 };
 
-type SideBarProps = {
+export type SideBarProps = {
   currentServiceUrl: string;
   onCurrentServiceUrlChange: (url: string) => void;
   configLoading: boolean;
@@ -18,11 +17,9 @@ type SideBarProps = {
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   docLoading?: boolean;
-  apiGroups: ApiGroup[];
-  onMenuSelect: (item: ApiDetail) => void;
-};
+} & ApiListProps;
 
-const SideBar = (props: SideBarProps) => {
+const SideBar: React.FC<SideBarProps> = (props) => {
   const {
     currentServiceUrl,
     onCurrentServiceUrlChange,
@@ -30,8 +27,11 @@ const SideBar = (props: SideBarProps) => {
     serviceOptions,
     searchQuery,
     setSearchQuery,
-    apiGroups,
-    onMenuSelect,
+    apis,
+    selectedKey,
+    onSelectKeyChange,
+    onExpandChange,
+    expanded,
   } = props;
 
   const handleServiceChange = (url: string) => {
@@ -75,8 +75,14 @@ const SideBar = (props: SideBarProps) => {
 
         <div className={"flex-1 pt-4 overflow-y-hidden flex flex-col"}>
           <div className={"h-full overflow-y-auto flex-1"}>
-            {apiGroups?.length ? (
-              <ApiList apis={apiGroups} onSelect={onMenuSelect} />
+            {apis?.length ? (
+              <ApiList
+                apis={apis}
+                selectedKey={selectedKey}
+                onSelectKeyChange={onSelectKeyChange}
+                expanded={expanded}
+                onExpandChange={onExpandChange}
+              />
             ) : (
               <Empty description={"暂无 API 接口"} />
             )}
