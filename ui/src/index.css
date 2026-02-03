@@ -1,4 +1,6 @@
-@import "tailwindcss";
+@layer theme, base, antd, components, utilities;
+
+@import 'tailwindcss';
 
 :root {
     --primary: 0 96 255;

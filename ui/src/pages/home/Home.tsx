@@ -25,7 +25,6 @@ import SideBar, {
 import ApiInfo from "../../components/api-info/ApiInfo.tsx";
 import CodeCard from "../../components/code-card/CodeCard.tsx";
 import type { ApiDetail } from "../../../types.ts";
-import { OpenAPI } from "openapi-types";
 import { stableHash } from "../../utils/getApiSlug.ts";
 
 const { Header, Sider } = Layout;
@@ -146,15 +145,15 @@ const Home: React.FC = () => {
     return findApi;
   }, [filteredGroupedApis, selectedApiKey]);
 
-  // 展开索引
-  const [expanded, setExpanded] = useState<string[]>(() => {
+  // 展开的分组
+  const [expandedGroupList, setExpandedGroupList] = useState<string[]>(() => {
     const api = searchParams.get("api");
     if (!api) return [];
     return [];
   });
 
   const onExpandChange = (indexList: string[]) => {
-    setExpanded(indexList);
+    setExpandedGroupList(indexList);
   };
 
   const { pluginEnabled, checking } = usePluginEnabled();
@@ -253,14 +252,26 @@ const Home: React.FC = () => {
 
   const apiGroups: SideBarProps["apis"] = useMemo(() => {
     return Object.entries(filteredGroupedApis).map(([tag, apis]) => {
+      const id = stableHash(tag);
+      const isExpanded = expandedGroupList.includes(id);
+
+      const children = apis.map((api) => ({
+        ...api,
+        isSelected: Boolean(selectedApiKey) && api.key === selectedApiKey,
+      }));
+
       return {
-        id: stableHash(tag),
+        id,
+        isExpanded,
+        children,
         name: tag,
-        children: apis,
       };
     });
-  }, [filteredGroupedApis]);
+  }, [filteredGroupedApis, expandedGroupList, selectedApiKey]);
 
+  /**
+   * 初始化时 设置默认展开的分组
+   */
   useEffect(() => {
     const selectedApiKey = searchParams.get("api");
 
@@ -269,12 +280,6 @@ const Home: React.FC = () => {
     if (!firstLoadDocument.current || !documentData) {
       return;
     }
-    console.log(
-      "firstLoadDocument",
-      firstLoadDocument.current,
-      documentData,
-      apiGroups,
-    );
 
     // 找出当前接口所在的分组
     const currentGroup = apiGroups.find((group) =>
@@ -282,7 +287,7 @@ const Home: React.FC = () => {
     );
     if (currentGroup) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setExpanded([currentGroup.id]);
+      setExpandedGroupList([currentGroup.id]);
     }
     console.log("currentGroup", currentGroup);
 
@@ -307,7 +312,7 @@ const Home: React.FC = () => {
               selectedKey={selectedApiKey}
               onSelectKeyChange={onMenuSelect}
               onExpandChange={onExpandChange}
-              expanded={expanded}
+              expanded={expandedGroupList}
             />
           </Sider>
 
@@ -332,6 +337,9 @@ const Home: React.FC = () => {
                 >
                   <Input.Search placeholder="input here" enterButton />
                 </AutoComplete>
+                <p className={"text-sm text-gray-500"}>
+                  {expandedGroupList?.join("、")}
+                </p>
               </div>
 
               <div>

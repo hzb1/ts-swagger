@@ -1,13 +1,14 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import Home from './pages/home/Home.tsx'
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { StyleProvider } from "@ant-design/cssinjs";
+import "./index.css";
+import Home from "./pages/home/Home.tsx";
 
-import 'dayjs/locale/zh-cn';
+import "dayjs/locale/zh-cn";
 
-import zhCN from 'antd/locale/zh_CN';
+import zhCN from "antd/locale/zh_CN";
 
-import {ConfigProvider} from "antd";
+import { ConfigProvider } from "antd";
 import { createBrowserRouter, RouterProvider } from "react-router";
 
 const router = createBrowserRouter([
@@ -18,10 +19,12 @@ const router = createBrowserRouter([
   },
 ]);
 
-createRoot(document.getElementById('root')!).render(
+createRoot(document.getElementById("root")!).render(
   <StrictMode>
+    {/*<StyleProvider hashPriority="high">*/}
     <ConfigProvider locale={zhCN}>
-       <RouterProvider router={router} />
+      <RouterProvider router={router} />
     </ConfigProvider>
+    {/*</StyleProvider>*/}
   </StrictMode>,
-)
+);
