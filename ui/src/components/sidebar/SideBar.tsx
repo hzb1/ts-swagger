@@ -46,7 +46,7 @@ const SideBar: React.FC<SideBarProps> = (props) => {
     >
       <div
         className={
-          "h-full flex flex-col flex-1 stable-scrollbar-gutter px-7 py-6"
+          "h-full flex flex-col flex-1 stable-scrollbar-gutter px-4 py-4"
         }
       >
         <div className={"flex justify-between items-center"}>
@@ -80,7 +80,6 @@ const SideBar: React.FC<SideBarProps> = (props) => {
                 apis={apis}
                 selectedKey={selectedKey}
                 onSelectKeyChange={onSelectKeyChange}
-                expanded={expanded}
                 onExpandChange={onExpandChange}
               />
             ) : (

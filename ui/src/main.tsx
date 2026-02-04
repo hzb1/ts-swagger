@@ -21,10 +21,10 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {/*<StyleProvider hashPriority="high">*/}
-    <ConfigProvider locale={zhCN}>
-      <RouterProvider router={router} />
-    </ConfigProvider>
-    {/*</StyleProvider>*/}
+    <StyleProvider hashPriority="high" layer>
+      <ConfigProvider locale={zhCN}>
+        <RouterProvider router={router} />
+      </ConfigProvider>
+    </StyleProvider>
   </StrictMode>,
 );

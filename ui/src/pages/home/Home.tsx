@@ -1,11 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AutoComplete, Input, message, Row, Col, Spin, Tag, Empty } from "antd";
 import { Layout, theme } from "antd";
 import "./Home.css";
@@ -36,11 +29,6 @@ const Home: React.FC = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // useEffect(() => {
-  //   const allParams = Object.fromEntries(searchParams.entries());
-  // console.log("on useEffect: ", allParams);
-  // }, [searchParams]);
-
   const [messageApi, contextHolder] = message.useMessage();
 
   const [options] = useState([
@@ -69,8 +57,6 @@ const Home: React.FC = () => {
       value: "https://www.lgsoar.cn/soar-api",
     },
   ]);
-
-  const firstLoadDocument = useRef(true);
 
   // 调用 Swagger 业务逻辑
   const {
@@ -269,37 +255,27 @@ const Home: React.FC = () => {
     });
   }, [filteredGroupedApis, expandedGroupList, selectedApiKey]);
 
+  const queryApiKey = searchParams.get("api");
+
   /**
-   * 初始化时 设置默认展开的分组
+   * 在初始化时 设置默认展开的分组
    */
-  useEffect(() => {
-    const selectedApiKey = searchParams.get("api");
-
-    if (!selectedApiKey) return;
-
-    if (!firstLoadDocument.current || !documentData) {
-      return;
-    }
-
+  if (expandedGroupList.length === 0 && queryApiKey && apiGroups) {
     // 找出当前接口所在的分组
     const currentGroup = apiGroups.find((group) =>
-      group.children.some((api) => api.key === selectedApiKey),
+      group.children.some((api) => api.key === queryApiKey),
     );
     if (currentGroup) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExpandedGroupList([currentGroup.id]);
     }
-    console.log("currentGroup", currentGroup);
-
-    firstLoadDocument.current = false;
-  }, [documentData, apiGroups, searchParams]);
+  }
 
   return (
     <>
       {contextHolder}
       <Spin spinning={configLoading || docLoading}>
         <Layout className={"views"}>
-          <Sider width={304} style={{ background: colorBgContainer }}>
+          <Sider width={324} style={{ background: colorBgContainer }}>
             <SideBar
               currentServiceUrl={currentServiceUrl}
               onCurrentServiceUrlChange={handleServiceChange}
@@ -312,7 +288,6 @@ const Home: React.FC = () => {
               selectedKey={selectedApiKey}
               onSelectKeyChange={onMenuSelect}
               onExpandChange={onExpandChange}
-              expanded={expandedGroupList}
             />
           </Sider>
 
@@ -337,9 +312,6 @@ const Home: React.FC = () => {
                 >
                   <Input.Search placeholder="input here" enterButton />
                 </AutoComplete>
-                <p className={"text-sm text-gray-500"}>
-                  {expandedGroupList?.join("、")}
-                </p>
               </div>
 
               <div>
