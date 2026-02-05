@@ -28,14 +28,16 @@ const SideBar: React.FC<SideBarProps> = (props) => {
     searchQuery,
     setSearchQuery,
     apis,
-    selectedKey,
     onSelectKeyChange,
-    onExpandChange,
-    expanded,
+    onGroupTitleClick,
   } = props;
 
   const handleServiceChange = (url: string) => {
     onCurrentServiceUrlChange(url);
+  };
+
+  const handleGroupTitleClick = (groupItem: ApiListProps['apis'][number]) => {
+    onGroupTitleClick?.(groupItem);
   };
 
   return (
@@ -78,9 +80,8 @@ const SideBar: React.FC<SideBarProps> = (props) => {
             {apis?.length ? (
               <ApiList
                 apis={apis}
-                selectedKey={selectedKey}
                 onSelectKeyChange={onSelectKeyChange}
-                onExpandChange={onExpandChange}
+                onGroupTitleClick={handleGroupTitleClick}
               />
             ) : (
               <Empty description={"暂无 API 接口"} />

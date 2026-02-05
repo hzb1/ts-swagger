@@ -18,26 +18,21 @@ type ApiItem = ApiDetail & {
 
 export type ApiListProps = {
   apis: ApiGroup[];
-  // 当前选择的api
-  selectedKey?: string | null;
   onSelectKeyChange?: (selectedKey: string) => void;
   // 当前展开的分组索引发生变化时的回调
-  onExpandChange: (expanded: string[]) => void;
+  // onExpandChange: (expanded: string[]) => void;
+  // 点击分组标题时触发
+  onGroupTitleClick?: (groupItem: ApiGroup) => void;
 };
 
 const ApiList: React.FC<ApiListProps> = ({
   apis,
-  selectedKey,
   onSelectKeyChange,
-  onExpandChange,
+   onGroupTitleClick,
 }) => {
-  // 切换收展状态
-  const onToggleExpand = (groupItem: ApiGroup) => {
-    onExpandChange(
-      groupItem.isExpanded
-        ? apis.filter((item) => item.id !== groupItem.id).map((item) => item.id)
-        : [...apis.map((item) => item.id), groupItem.id],
-    );
+
+  const handleGroupTitleClick = (groupItem: ApiGroup) => {
+    onGroupTitleClick?.(groupItem);
   };
 
   return (
@@ -56,21 +51,26 @@ const ApiList: React.FC<ApiListProps> = ({
               className={
                 "sidebar-group-header flex items-center gap-2.5 mb-3.5 lg:mb-2.5 text-gray-900 dark:text-gray-200 font-medium"
               }
-              onClick={() => onToggleExpand(groupItem)}
+              onClick={() => handleGroupTitleClick(groupItem)}
             >
               <h5>{groupName}</h5>
             </div>
-            <ul className={isExpanded ? "" : "hidden"}>
-              {groupItem.children.map((apiItem) => {
-                return (
-                  <ApiItem
-                    apiItem={apiItem}
-                    key={apiItem.key}
-                    onClick={() => onSelectKeyChange?.(apiItem.key)}
-                  />
-                );
-              })}
-            </ul>
+            {
+              isExpanded && (
+                <ul>
+                  {groupItem.children.map((apiItem) => {
+                    return (
+                      <ApiItem
+                        apiItem={apiItem}
+                        key={apiItem.key}
+                        onClick={() => onSelectKeyChange?.(apiItem.key)}
+                      />
+                    );
+                  })}
+                </ul>
+              )
+            }
+
           </div>
         );
       })}

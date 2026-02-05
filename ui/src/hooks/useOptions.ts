@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { GeneratorOptions } from '../../../utils/SwaggerParser'
+import type {GeneratorOptions} from "../utils/SwaggerParser.ts";
 
 const STORAGE_KEY = 'swagger_config_v1'
 
@@ -66,7 +66,7 @@ export function useOptions() {
         // ignore parse error
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [])
 
   // 持久化监听（当 configState 改变时写入 localStorage）
@@ -99,17 +99,19 @@ export function useOptions() {
         requestTemplate = configState.requestTemplateRaw
       } else if (typeof configState.requestTemplateRaw === 'string') {
         // eval 字符串以得到函数
-        // eslint-disable-next-line no-eval
+
         requestTemplate = eval(configState.requestTemplateRaw)
       }
     } catch (e) {
       // 保持与原实现一致：打印错误并继续
-      // eslint-disable-next-line no-console
+
       console.error('Template eval error:', e)
     }
 
     // 类型断言：GeneratorOptions 包含 configState 的字段 + typeNameMapper + requestTemplate
-    return { ...(configState as any), typeNameMapper, requestTemplate } as GeneratorOptions
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-expect-error
+    return { ...(configState as never), typeNameMapper, requestTemplate } as GeneratorOptions
     // 只在 configState 改变时重新计算
   }, [configState])
 

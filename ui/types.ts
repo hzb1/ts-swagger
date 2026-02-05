@@ -1,9 +1,6 @@
-import { OpenAPI, OpenAPIV2, OpenAPIV3, OpenAPIV3_1 } from "openapi-types";
+import type {OpenAPI} from "openapi-types";
 
-export type OperationObject =
-  | OpenAPIV2.OperationObject
-  | OpenAPIV3.OperationObject
-  | OpenAPIV3_1.OperationObject;
+export type OperationObject = OpenAPI.Operation;
 
 /**
  * 接口详情模型

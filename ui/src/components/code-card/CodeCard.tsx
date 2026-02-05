@@ -1,7 +1,7 @@
 import CopyIcon from "../CopyIcon.tsx";
-import copyToClipboard from "../../../../utils/copyToClipboard/copyToClipboard.ts";
 import CodeHighlighting from "../ui/CodeHighlighting/CodeHighlighting.tsx";
 import React from "react";
+import copyToClipboard from "../../utils/copyToClipboard/copyToClipboard.ts";
 
 type CodeCardProps = {
   title: string;

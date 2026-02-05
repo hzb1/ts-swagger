@@ -4,7 +4,6 @@ import { Layout, theme } from "antd";
 import "./Home.css";
 import { useSwagger } from "../../hooks/useSwagger.ts";
 import { useOptions } from "../../hooks/useOptions.ts";
-import { SwaggerToTS } from "../../../../utils/SwaggerParser.ts";
 import {
   CheckCircleOutlined,
   LoadingOutlined,
@@ -19,6 +18,8 @@ import ApiInfo from "../../components/api-info/ApiInfo.tsx";
 import CodeCard from "../../components/code-card/CodeCard.tsx";
 import type { ApiDetail } from "../../../types.ts";
 import { stableHash } from "../../utils/getApiSlug.ts";
+import {SwaggerToTS} from "../../utils/SwaggerParser.ts";
+import type {ApiGroup} from "./utils.ts";
 
 const { Header, Sider } = Layout;
 
@@ -138,8 +139,15 @@ const Home: React.FC = () => {
     return [];
   });
 
-  const onExpandChange = (indexList: string[]) => {
-    setExpandedGroupList(indexList);
+  const handleGroupTitleClick = (groupItem: ApiGroup) => {
+    const groupId = groupItem.id;
+    setExpandedGroupList((prev) => {
+      if (prev.includes(groupId)) {
+        return prev.filter((id) => id !== groupId);
+      } else {
+        return [...prev, groupId];
+      }
+    });
   };
 
   const { pluginEnabled, checking } = usePluginEnabled();
@@ -285,9 +293,8 @@ const Home: React.FC = () => {
               setSearchQuery={setSearchQuery}
               docLoading={docLoading}
               apis={apiGroups}
-              selectedKey={selectedApiKey}
               onSelectKeyChange={onMenuSelect}
-              onExpandChange={onExpandChange}
+              onGroupTitleClick={handleGroupTitleClick}
             />
           </Sider>
 

@@ -1,6 +1,7 @@
 import type { ApiDetail } from "../../../types.ts";
 import React from "react";
 import clsx from "clsx";
+import Method from "../ui/Method/Method.tsx";
 
 type TData = ApiDetail & {
   // 是否选中
@@ -31,13 +32,7 @@ const ApiItem: React.FC<{ apiItem: TData; onClick: () => void }> = ({
         onClick={onClick}
       >
         <span className={"method-nav-pill flex items-center w-8"}>
-          <span
-            className={
-              "px-1 py-0.5 rounded-md text-[0.55rem] leading-tight font-bold bg-[#3064E3] text-[#FFFFFF]"
-            }
-          >
-            {apiItem.method}
-          </span>
+          <Method method={apiItem.method} isActive={isSelected} />
         </span>
         <div className={"flex-1 flex items-center space-x-2.5 truncate"}>
           {apiName}

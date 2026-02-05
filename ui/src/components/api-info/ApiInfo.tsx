@@ -1,9 +1,9 @@
-import type { SwaggerApi } from "../../pages/home/utils.ts";
 import "./ApiInfo.css";
 import CodeCard from "../code-card/CodeCard.tsx";
+import type { ApiDetail } from "../../../types.ts";
 
 type ApiInfoProps = {
-  api: SwaggerApi;
+  api: ApiDetail;
   codeMap?: {
     "Request Function": string;
     Models: string;
@@ -15,7 +15,7 @@ type ApiInfoProps = {
 
 const ApiInfo = ({ api, codeMap }: ApiInfoProps) => {
   // 标题
-  const title = api?.summary || api.method + " " + api.path;
+  const title = api?.operation?.summary;
 
   // 描述
   // const description = api?.description || "";
@@ -84,15 +84,6 @@ const ApiInfo = ({ api, codeMap }: ApiInfoProps) => {
                           {api.path}
                         </div>
                       </div>
-                      {/*<div className={'flex'}>*/}
-                      {/*  <div className="text-sm text-gray-400">/</div>*/}
-                      {/*  <div className="text-sm font-medium text-gray-800 dark:text-white min-w-max">chat-messages</div>*/}
-                      {/*  <div className="text-sm text-gray-400">/</div>*/}
-                      {/*  <div*/}
-                      {/*    className="text-sm font-mono font-medium rounded-md px-1 border-2 min-w-max text-[#3064E3] bg-[#3064E3]/10 border-[#3064E3]/30">{'task_id'}</div>*/}
-                      {/*  <div className="text-sm text-gray-400">/</div>*/}
-                      {/*  <div className="text-sm font-medium text-gray-800 dark:text-white min-w-max">stop</div>*/}
-                      {/*</div>*/}
                     </div>
                   </div>
                 </div>

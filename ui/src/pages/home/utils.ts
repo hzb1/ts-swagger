@@ -1,21 +1,14 @@
 import type { ApiDetail } from "../../../types.ts";
 
-interface SwaggerParameter {
-  name: string;
-  in: "query" | "path" | "header" | "cookie";
-  required: boolean;
-  schema?: { type: string };
-}
-
-export interface SwaggerApi {
-  path: string;
-  method: string;
-  summary?: string;
-  parameters?: SwaggerParameter[];
-  requestBody?: never;
-}
-
 export type ApiGroup = {
+  id: string;
   name: string;
-  children: ApiDetail[];
+  children: ApiItem[];
+  // 是否展开
+  isExpanded: boolean;
+};
+
+export type ApiItem = ApiDetail & {
+  // 是否选中
+  isSelected: boolean;
 };
