@@ -69,3 +69,18 @@ export interface ErrorSpec {
   type: 'NETWORK_ERROR' | 'TIMEOUT' | 'INVALID_URL' | 'UNKNOWN'
   message: string
 }
+
+export class ProxyError extends Error {
+  public type: ErrorSpec['type'];
+  readonly original: ErrorSpec;
+
+  constructor(errorSpec: ErrorSpec) {
+    super(errorSpec.message);
+    this.name = 'ProxyError';
+    this.type = errorSpec.type;
+    this.original = errorSpec;
+
+    // 修复 TS 继承 Error 时的原型链问题
+    Object.setPrototypeOf(this, ProxyError.prototype);
+  }
+}

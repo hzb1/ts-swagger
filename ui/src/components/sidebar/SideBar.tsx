@@ -10,11 +10,11 @@ type Option = {
 };
 
 export type SideBarProps = {
-  currentServiceUrl: string;
+  currentServiceUrl?: string;
   onCurrentServiceUrlChange: (url: string) => void;
-  configLoading: boolean;
+  configLoading?: boolean;
   serviceOptions: Option[];
-  searchQuery: string;
+  searchQuery?: string;
   setSearchQuery: (query: string) => void;
   docLoading?: boolean;
 } & ApiListProps;

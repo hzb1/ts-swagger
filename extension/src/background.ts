@@ -49,7 +49,7 @@ async function handleRequest(
         status: res.status,
         statusText: res.statusText,
         headers: headersToObject(res.headers),
-        body: parseBody(text)
+        body: parseBody(text) as any
       },
       timing: {
         startTime,
@@ -57,15 +57,18 @@ async function handleRequest(
         duration: endTime - startTime
       }
     }
-    console.error(`[${requestId}] 成功响应`, success)
 
+    console.error(`[${requestId}] 成功响应`, {
+      type: 'PROXY_RESPONSE',
+      requestId,
+      result: success
+    })
     return {
       type: 'PROXY_RESPONSE',
       requestId,
       result: success
     }
   } catch (err: any) {
-    console.error(`[${requestId}] 失败响应`, err)
     const failure: ProxyFailure = {
       ok: false,
       error: {
@@ -78,6 +81,12 @@ async function handleRequest(
         message: err.message || 'Unknown error'
       }
     }
+    console.error(`[${requestId}] 失败响应`, err, err.name, err.message)
+    console.log(`[${requestId}] 失败响应`, {
+      type: 'PROXY_RESPONSE',
+      requestId,
+      result: failure
+    })
 
     return {
       type: 'PROXY_RESPONSE',

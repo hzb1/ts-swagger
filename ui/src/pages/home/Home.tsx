@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { AutoComplete, Input, message, Row, Col, Spin, Tag, Empty } from "antd";
+import React, { useEffect, useMemo, useState } from "react";
+import { AutoComplete, Input, Row, Col, Spin, Tag, Empty } from "antd";
 import { Layout, theme } from "antd";
 import "./Home.css";
 import { useSwagger } from "@/hooks/useSwagger.ts";
@@ -29,8 +29,6 @@ const Home: React.FC = () => {
 
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [messageApi, contextHolder] = message.useMessage();
-
   const [options] = useState([
     {
       label: "lin",
@@ -58,59 +56,29 @@ const Home: React.FC = () => {
     },
   ]);
 
+  const ip = searchParams.get("ip") ?? options[3].value;
+  const serviceUrl = searchParams.get("service") ?? undefined;
+  const selectedApiKey = searchParams.get("api");
+
+  const queryApiKey = searchParams.get("api");
+
   // 调用 Swagger 业务逻辑
   const {
     configData,
     documentData,
-    configLoading,
-    docLoading,
+    stage,
     searchQuery,
     setSearchQuery,
     filteredGroupedApis,
-    onLoadDocument,
-    loadData,
-  } = useSwagger({
-    // 配置加载完成时的回调
-    onConfigLoaded: (configData) => {
-      if (!currentServiceUrl) {
-        setCurrentServiceUrl(configData?.urls[0].url);
-      }
-    },
-    // 文档加载完成时的回调
-    onDocumentLoaded: () => {},
-  });
+    loadSwagger,
+    error,
+  } = useSwagger();
+
+  const configLoading = stage === 'config';
+  const docLoading = stage === 'document';
 
   // 2. 调用配置持久化逻辑
   const { generatorOptions } = useOptions();
-
-  /**
-   * Swagger 服务 IP 地址
-   * 例如: http://localhost:9966
-   * 例如: http://172.16.13.93:9000
-   */
-  const [ip, setIp] = useState<string>(
-    searchParams.get("ip") ?? options[4].value!,
-  );
-
-  const onIpChange = (value: string) => {
-    setIp(value?.trim());
-
-    // 更新url
-    setSearchParams((prev) => {
-      const newParams = new URLSearchParams(prev);
-      newParams.set("ip", value?.trim());
-      return newParams;
-    });
-  };
-
-  const [currentServiceUrl, setCurrentServiceUrl] = useState(
-    searchParams.get("service") ?? "",
-  );
-
-  // 当前选中的api key
-  const [selectedApiKey, setSelectedApiKey] = useState<
-    string | undefined | null
-  >(searchParams.get("api"));
 
   const selectedApi = useMemo(() => {
     if (!selectedApiKey) return null;
@@ -151,57 +119,25 @@ const Home: React.FC = () => {
 
   const { pluginEnabled, checking } = usePluginEnabled();
 
-  const [version] = useState("v3");
 
-  const loadSwagger = useCallback(
-    ({
-      ip,
-      version,
-      serviceUrl,
-    }: {
-      ip: string;
-      version?: string;
-      serviceUrl?: string;
-    }) => {
-      if (!ip) {
-        messageApi.error("请输入 IP 地址");
-        return;
-      }
-      try {
-        loadData({
-          ip,
-          version,
-          serviceUrl,
-        });
-      } catch (error) {
-        console.error("加载 Swagger 失败:", error);
-      }
-    },
-    [loadData, messageApi],
-  );
-
+// 2. effect：监听状态 → 发请求
   useEffect(() => {
-    loadSwagger({ ip, serviceUrl: currentServiceUrl });
-  }, []);
+    if (!ip) return;
+    loadSwagger({ ip, serviceUrl });
+  }, [ip, serviceUrl]);
 
-  const handleSearch = useCallback(
-    (value: string) => {
-      const nextIp = value?.trim();
-      console.log("搜索", { ip, version, nextIp });
-      loadSwagger({ ip: nextIp, version });
-    },
-    [ip, version, loadSwagger],
-  );
+  const handleSearch = (nextIp: string) => {
+    setSearchParams({ ip: nextIp });
+  };
 
   /**
    * 菜单选择回调
    */
   const onMenuSelect = (key: string) => {
-    setSelectedApiKey(key);
     setSearchParams((prev) => {
-      const newParams = new URLSearchParams(prev);
-      newParams.set("api", key);
-      return newParams;
+      const next = new URLSearchParams(prev);
+      next.set("api", key);
+      return next;
     });
   };
 
@@ -219,18 +155,12 @@ const Home: React.FC = () => {
     };
   }, [documentData, generatorOptions, selectedApi]);
 
-  const handleServiceChange = (serviceUrl: string) => {
-    setCurrentServiceUrl(serviceUrl);
-    // 切换服务 清空选中
-    setSelectedApiKey("");
-    const fullUrl = `${ip}${serviceUrl}`;
-    onLoadDocument(fullUrl).then(() => {
-      // 更新url
-      setSearchParams((prev) => {
-        const newParams = new URLSearchParams(prev);
-        newParams.set("service", serviceUrl);
-        return newParams;
-      });
+  const handleServiceChange = (url: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("service", url);
+      next.delete("api");
+      return next;
     });
   };
 
@@ -262,8 +192,6 @@ const Home: React.FC = () => {
     });
   }, [filteredGroupedApis, expandedGroupList, selectedApiKey]);
 
-  const queryApiKey = searchParams.get("api");
-
   /**
    * 在初始化时 设置默认展开的分组
    */
@@ -279,12 +207,11 @@ const Home: React.FC = () => {
 
   return (
     <>
-      {contextHolder}
       <Spin spinning={configLoading || docLoading}>
         <Layout className={"views"}>
           <Sider width={324} style={{ background: colorBgContainer }}>
             <SideBar
-              currentServiceUrl={currentServiceUrl}
+              currentServiceUrl={serviceUrl}
               onCurrentServiceUrlChange={handleServiceChange}
               configLoading={configLoading}
               serviceOptions={serviceOptions}
@@ -309,7 +236,9 @@ const Home: React.FC = () => {
               <div className={"search-wrapper"}>
                 <AutoComplete
                   value={ip}
-                  onChange={onIpChange}
+                  onChange={(value) => {
+                    setSearchParams({ ip: value });
+                  }}
                   onSelect={handleSearch}
                   options={options}
                   style={{ width: 304 }}
@@ -349,6 +278,7 @@ const Home: React.FC = () => {
               </div>
             </Header>
             <Layout className={"content-wrapper overflow-y-auto"}>
+              {error && <span>{error}</span>}
               {selectedApi ? (
                 <Row gutter={[16, 16]} style={{ height: "100%" }}>
                   <Col span={12} className={"left-main"}>

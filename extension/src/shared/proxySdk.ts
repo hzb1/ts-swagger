@@ -1,8 +1,8 @@
-import type {
+import {
+  ProxyError,
   ProxyRequestMessage,
   ProxyResponseMessage,
-  RequestSpec,
-} from '../extension/src/shared/types'
+} from './types'
 
 /* ----------------------------------
  * 工具函数
@@ -92,7 +92,7 @@ export function checkPluginEnabled(timeout = 1000): Promise<boolean> {
 
 async function proxyFetchRaw(
   url: string,
-  init?: RequestInit,
+  init?: RequestInit & { timeout?: number },
 ): Promise<{
   status: number
   statusText: string
@@ -101,38 +101,75 @@ async function proxyFetchRaw(
   bodyType: 'json' | 'text'
 }> {
   const requestId = genRequestId()
-
-  const payload: RequestSpec = {
-    url,
-    method: (init?.method || 'GET'),
-    headers: normalizeHeaders(init?.headers),
-    body: init?.body ? { type: 'text', value: String(init.body) } : undefined,
-  }
-
-  const message: ProxyRequestMessage = {
-    type: 'PROXY_REQUEST',
-    requestId,
-    payload,
-  }
+  let timer: number | undefined;
+  const signal = init?.signal; // 获取原生 signal
+  const timeout = init?.timeout ?? 10000;
 
   // @ts-ignore
   return new Promise((resolve, reject) => {
+
+    // 处理已经被取消的情况
+    if (signal?.aborted) {
+      return reject(new DOMException('The user aborted a request.', 'AbortError'));
+    }
+
+    // 1. 定义清理函数，防止监听器残留
+    const cleanup = () => {
+      window.removeEventListener('message', handler);
+      clearTimeout(timer);
+      if (signal) {
+        signal.removeEventListener('abort', onAbort);
+      }
+    };
+
+    // 监听信号取消
+    const onAbort = () => {
+      clearTimeout(timer); // 显式清除，防止后续触发超时 reject
+      cleanup();
+      // 这里可以考虑向插件发送一个“取消请求”的指令，但通常 fetch 的中断由后端 timeout 或信号控制
+      reject(new DOMException('The user aborted a request.', 'AbortError'));
+    };
+
+    if (signal) {
+      signal.addEventListener('abort', onAbort);
+    }
+
+    // 2. 启动超时计时器
+    timer = window.setTimeout(() => {
+      cleanup();
+      reject(new ProxyError({
+        type: 'TIMEOUT',
+        message: `Request timed out after ${timeout}ms`
+      }));
+    }, timeout);
+
+
     function handler(e: MessageEvent) {
-      const msg = e.data as ProxyResponseMessage
-      // debugger;
+      const msg = e?.data as ProxyResponseMessage
       if (!msg || msg.type !== 'PROXY_RESPONSE') return
+      // debugger;
       if (msg.requestId !== requestId) return
+
+      cleanup(); // 收到响应，立即清理计时器和监听器
 
       if (typeof msg.result !== 'object' || msg.result === null) {
         console.log('插件 fetch 失败:', msg)
         return
       }
 
-      window.removeEventListener('message', handler)
-
       if (!msg.result.ok) {
-        // console.error('插件 fetch 失败:', msg)
-        reject(new Error(msg?.result?.error?.message || 'Proxy fetch failed'))
+        const errorSpec = msg.result.error;
+
+        // 打印日志方便调试
+        console.error(`[Proxy Fetch Error] Type: ${errorSpec.type}, Message: ${errorSpec.message}`);
+
+        // 如果插件返回的是 TIMEOUT，我们转换为 AbortError 以对齐原生 fetch
+        if (msg.result?.error?.type === 'TIMEOUT') {
+          reject(new DOMException('The operation was aborted.', 'AbortError'));
+        } else {
+          reject(new ProxyError(errorSpec));
+        }
+
         return
       }
 
@@ -147,6 +184,19 @@ async function proxyFetchRaw(
     }
 
     window.addEventListener('message', handler)
+
+    const message: ProxyRequestMessage = {
+      type: 'PROXY_REQUEST',
+      requestId,
+      payload: {
+        url,
+        method: (init?.method || 'GET'),
+        headers: normalizeHeaders(init?.headers),
+        body: init?.body ? { type: 'text', value: String(init.body) } : undefined,
+        timeout: init?.timeout // 传递给插件执行
+      },
+    }
+
     window.postMessage(message, '*')
   })
 }
@@ -198,12 +248,18 @@ class ProxyResponse {
   }
 
   async json() {
+    if (this._bodyUsed) throw new TypeError('Failed to execute "json" on "Response": body stream is locked');
+    this._bodyUsed = true;
+
     if (this.raw.bodyType !== 'json') {
       throw new Error('Response is not JSON')
     }
-    this._bodyUsed = true
     // console.warn(this.raw.bodyText)
     return JSON.parse(this.raw.bodyText)
+  }
+
+  clone() {
+    return new ProxyResponse(this.raw);
   }
 }
 
@@ -213,22 +269,29 @@ class ProxyResponse {
 
 export async function request(
   input: RequestInfo,
-  init?: RequestInit,
+  init?: RequestInit & { timeout?: number },
 ): Promise<Response | ProxyResponse> {
   const url = typeof input === 'string' ? input : input.url
 
-  // const usePlugin = await checkPluginEnabled()
-  //
-  // if (!usePlugin) {
-  //   console.warn('usePlugin', usePlugin)
-  //   // 原生 fetch
-  //   return fetch(input, init)
-  // }
+  const usePlugin = await checkPluginEnabled()
+
+  if (!usePlugin) {
+    console.warn('usePlugin', usePlugin)
+    console.warn('request', input, init)
+    // 原生 fetch
+    return fetch(input, init)
+  }
 
   console.warn('request', url, init)
 
-  // 插件 fetch
-  const raw = await proxyFetchRaw(url, init)
-
-  return new ProxyResponse(raw)
+  try {
+    const raw = await proxyFetchRaw(url, init);
+    return new ProxyResponse(raw);
+  } catch (err) {
+    // 如果是超时或其他错误，可以在这里统一记录日志
+    if (err instanceof ProxyError) {
+      console.warn(`[Bridge] Request to ${url} timed out.`);
+    }
+    throw err; // 继续抛出给业务层处理
+  }
 }

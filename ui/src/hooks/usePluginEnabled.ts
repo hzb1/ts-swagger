@@ -1,5 +1,5 @@
 import {useCallback, useEffect, useState} from "react";
-import {checkPluginEnabled} from "../../../utils/proxySdk.ts";
+import {checkPluginEnabled} from "../../../extension/src/shared/proxySdk.ts";
 
 
 /**
