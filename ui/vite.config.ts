@@ -1,6 +1,16 @@
 import {defineConfig} from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import {resolve} from "path";
+
+const pathResolve = (dir: string) => {
+  return resolve(__dirname, '.', dir)
+}
+
+const alias: Record<string, string> = {
+  '@': pathResolve('./src'),
+}
+
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -10,5 +20,8 @@ export default defineConfig({
   ],
   server: {
     port: 6699,
+  },
+  resolve: {
+    alias: alias
   }
 })

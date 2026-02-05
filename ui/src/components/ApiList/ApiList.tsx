@@ -39,8 +39,11 @@ const ApiList: React.FC<ApiListProps> = ({
     <>
       {apis.map((groupItem) => {
         const groupName = groupItem.children.length
-          ? `${groupItem.name} (${groupItem.children.length})`
+          ? `${groupItem.name}`
           : groupItem.name;
+
+        // 数量
+        const num = groupItem.children?.length ? ` (${groupItem.children.length})` : ''
 
         // 是否展开
         const isExpanded = groupItem.isExpanded;
@@ -54,6 +57,9 @@ const ApiList: React.FC<ApiListProps> = ({
               onClick={() => handleGroupTitleClick(groupItem)}
             >
               <h5>{groupName}</h5>
+              {
+                <span>{num}</span>
+              }
             </div>
             {
               isExpanded && (

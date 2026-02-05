@@ -2,25 +2,24 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AutoComplete, Input, message, Row, Col, Spin, Tag, Empty } from "antd";
 import { Layout, theme } from "antd";
 import "./Home.css";
-import { useSwagger } from "../../hooks/useSwagger.ts";
-import { useOptions } from "../../hooks/useOptions.ts";
+import { useSwagger } from "@/hooks/useSwagger.ts";
+import { useOptions } from "@/hooks/useOptions.ts";
 import {
   CheckCircleOutlined,
   LoadingOutlined,
   WarningOutlined,
 } from "@ant-design/icons";
-import { usePluginEnabled } from "../../hooks/usePluginEnabled.ts";
+import { usePluginEnabled } from "@/hooks/usePluginEnabled.ts";
 import { useSearchParams } from "react-router";
 import SideBar, {
   type SideBarProps,
-} from "../../components/sidebar/SideBar.tsx";
-import ApiInfo from "../../components/api-info/ApiInfo.tsx";
-import CodeCard from "../../components/code-card/CodeCard.tsx";
+} from "@/components/sidebar/SideBar.tsx";
+import ApiInfo from "@/components/api-info/ApiInfo.tsx";
+import CodeCard from "@/components/code-card/CodeCard.tsx";
 import type { ApiDetail } from "../../../types.ts";
-import { stableHash } from "../../utils/getApiSlug.ts";
-import {SwaggerToTS} from "../../utils/SwaggerParser.ts";
+import { stableHash } from "@/utils/getApiSlug.ts";
+import {SwaggerToTS} from "@/utils/SwaggerParser.ts";
 import type {ApiGroup} from "./utils.ts";
-
 const { Header, Sider } = Layout;
 
 const Home: React.FC = () => {
