@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { AutoComplete, Input, Row, Col, Spin, Tag, Empty } from "antd";
 import { Layout, theme } from "antd";
 import "./Home.css";
@@ -17,7 +17,7 @@ import SideBar, {
 import ApiInfo from "@/components/api-info/ApiInfo.tsx";
 import CodeCard from "@/components/code-card/CodeCard.tsx";
 import type { ApiDetail } from "../../../types.ts";
-import { stableHash } from "@/utils/getApiSlug.ts";
+import {getApiSlug, stableHash} from "@/utils/getApiSlug.ts";
 import {SwaggerToTS} from "@/utils/SwaggerParser.ts";
 import type {ApiGroup} from "./utils.ts";
 const { Header, Sider } = Layout;
@@ -62,20 +62,59 @@ const Home: React.FC = () => {
 
   const queryApiKey = searchParams.get("api");
 
-  // 调用 Swagger 业务逻辑
-  const {
-    configData,
-    documentData,
-    stage,
-    searchQuery,
-    setSearchQuery,
-    filteredGroupedApis,
-    loadSwagger,
-    error,
-  } = useSwagger();
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') ?? '');
+
+  const { documentData, configData, stage, error } = useSwagger({
+    ip,
+    serviceUrl,
+    options: {
+      // 当 Hook 发现配置加载好了但 URL 没 service 时触发
+      onAutoSelectService: (defaultUrl) => {
+        setSearchParams(prev => {
+          const next = new URLSearchParams(prev);
+          next.set("service", defaultUrl);
+          return next;
+        }, { replace: true });
+      }
+    }
+  });
 
   const configLoading = stage === 'config';
   const docLoading = stage === 'document';
+
+  const filteredGroupedApis = useMemo(() => {
+    // 这里的 documentData 来自 useSwagger()
+    if (!documentData?.paths) return {};
+
+    const query = searchQuery.trim().toLowerCase();
+    const groups: Record<string, ApiDetail[]> = {};
+
+    for (const [path, item] of Object.entries(documentData.paths)) {
+      // 遍历所有 HTTP 方法
+      for (const method of ["get", "post", "put", "delete", "patch"] as const) {
+        const op = (item)[method];
+        if (!op) continue;
+
+        let matchType = "";
+        // 匹配逻辑：路径、摘要或 OperationId
+        if (path.toLowerCase().includes(query)) matchType = "路径";
+        else if (op.summary?.toLowerCase().includes(query)) matchType = "名称";
+        else if (op.operationId?.toLowerCase().includes(query)) matchType = "ID";
+        else if (query !== "") continue; // 如果有搜索词但不匹配则跳过
+
+        const tag = op.tags?.[0] ?? "Default";
+        (groups[tag] ||= []).push({
+          key: getApiSlug({ path, method, operation: op }),
+          path,
+          method,
+          matchType,
+          operation: op,
+        });
+      }
+    }
+
+    return groups;
+  }, [documentData, searchQuery]);
 
   // 2. 调用配置持久化逻辑
   const { generatorOptions } = useOptions();
@@ -118,13 +157,6 @@ const Home: React.FC = () => {
   };
 
   const { pluginEnabled, checking } = usePluginEnabled();
-
-
-// 2. effect：监听状态 → 发请求
-  useEffect(() => {
-    if (!ip) return;
-    loadSwagger({ ip, serviceUrl });
-  }, [ip, serviceUrl]);
 
   const handleSearch = (nextIp: string) => {
     setSearchParams({ ip: nextIp });

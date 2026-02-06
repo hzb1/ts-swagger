@@ -1,4 +1,4 @@
-import type { OpenAPI } from 'openapi-types'
+import type { OpenAPI, OpenAPIV2, OpenAPIV3 } from 'openapi-types'
 
 export interface TemplateContext {
   method: string
@@ -33,10 +33,14 @@ export interface GeneratedTypes {
   requestFunction: string
 }
 
+// 定义 Schema 联合类型，涵盖 Swagger 2.0 和 OpenAPI 3.0
+type SchemaObject = OpenAPIV2.SchemaObject | OpenAPIV3.SchemaObject | OpenAPIV3.ReferenceObject
+
 export class SwaggerToTS {
   private doc: OpenAPI.Document
   private options: Required<GeneratorOptions>
-  private usedDefinitions = new Map<string, any>()
+  // 存储已使用的定义，SchemaObject 替代 any
+  private usedDefinitions = new Map<string, SchemaObject>()
 
   constructor(doc: OpenAPI.Document, options: GeneratorOptions = {}) {
     this.doc = doc
@@ -47,137 +51,135 @@ export class SwaggerToTS {
       semicolon: options.semicolon ?? true,
       typeNameMapper: options.typeNameMapper ?? ((name) => name),
       int64ToString: options.int64ToString ?? true,
-      requestTemplate: options.requestTemplate as any,
-      showExample: options.showExample ?? true, // 默认开启
+      requestTemplate: options.requestTemplate || (() => ''),
+      showExample: options.showExample ?? true,
     }
   }
 
-  private get semi() {
-    return this.options.semicolon ? ';' : ''
-  }
-  private get exp() {
-    return this.options.addExport ? 'export ' : ''
-  }
+  private get semi() { return this.options.semicolon ? ';' : '' }
+  private get exp() { return this.options.addExport ? 'export ' : '' }
 
-  private resolveRef(ref: string) {
-    // 1. 处理路径：移除开头的 #/
+  private resolveRef(ref: string): { schema: SchemaObject; name: string } {
     const path = ref.replace(/^#\//, '')
     const parts = path.split('/')
     const rawName = parts[parts.length - 1]
     const mappedName = this.options.typeNameMapper(rawName)
 
-    // 2. 深度查找定义
-    let current: any = this.doc
+    // 递归查找 doc 内部对象
+    let current: unknown = this.doc
     for (const part of parts) {
-      current = current?.[part]
+      current = (current as Record<string, unknown>)?.[part]
     }
 
-    // 3. 记录已使用的定义（用于生成 models）
-    if (current && !this.usedDefinitions.has(mappedName)) {
-      this.usedDefinitions.set(mappedName, current)
-      // 递归解析内部可能存在的其他引用，确保它们也被加入 usedDefinitions
-      this.getTSType(current)
+    const schema = current as SchemaObject
+    if (schema && !this.usedDefinitions.has(mappedName)) {
+      this.usedDefinitions.set(mappedName, schema)
+      this.getTSType(schema)
     }
 
-    return { schema: current, name: mappedName }
+    return { schema, name: mappedName }
   }
 
   private formatJSDoc(
-    doc: { summary?: string; description?: string; example?: any },
+    doc: { summary?: string; description?: string; example?: unknown },
     indentDepth = 0,
   ): string {
     const lines: string[] = []
     const indent = ' '.repeat(this.options.indent * indentDepth)
 
-    if (doc.summary) lines.push(`${doc.summary}`)
-    if (doc.description) lines.push(`${doc.description}`)
+    if (doc.summary) lines.push(doc.summary)
+    if (doc.description) lines.push(doc.description)
 
-    // 根据配置决定是否展示示例
-    if (this.options.showExample && doc.example) {
-      const exampleStr = typeof doc.example === 'object' ? JSON.stringify(doc.example) : doc.example
+    if (this.options.showExample && doc.example !== undefined) {
+      const exampleStr = typeof doc.example === 'object' ? JSON.stringify(doc.example) : String(doc.example)
       lines.push(`@example ${exampleStr}`)
     }
 
     if (lines.length === 0) return ''
-
-    if (lines.length === 1) {
-      return `${indent}/** ${lines[0]} */\n`
-    }
+    if (lines.length === 1) return `${indent}/** ${lines[0]} */\n`
 
     const content = lines.map((line) => `${indent} * ${line}`).join('\n')
     return `${indent}/**\n${content}\n${indent} */\n`
   }
 
-  private getTSType(schema: any, depth = 1): string {
+  private getTSType(schema: SchemaObject | undefined, depth = 1): string {
     if (!schema) return 'any'
-    if (schema.$ref) return this.resolveRef(schema.$ref).name
-    if (schema.enum)
-      return schema.enum.map((v: any) => (typeof v === 'string' ? `'${v}'` : v)).join(' | ')
-    if (schema.type === 'array') return `${this.getTSType(schema.items, depth)}[]`
+
+    // 处理引用
+    if ('$ref' in schema) {
+      return this.resolveRef(schema.$ref!).name
+    }
+
+    // 处理枚举
+    if (schema.enum) {
+      return schema.enum.map((v) => (typeof v === 'string' ? `'${v}'` : String(v))).join(' | ')
+    }
+
+    // 处理数组
+    if (schema.type === 'array' && schema.items) {
+      return `${this.getTSType(schema.items as SchemaObject, depth)}[]`
+    }
+
+    // 处理对象
     if (schema.type === 'object' || schema.properties) {
-      const props = Object.entries(schema.properties || {})
+      const properties = (schema.properties || {}) as Record<string, SchemaObject>
+      const props = Object.entries(properties)
       if (props.length === 0) return 'Record<string, any>'
+
       let objStr = '{\n'
-      props.forEach(([key, prop]: [string, any]) => {
-        const isRequired = schema.required?.includes(key)
+      const required = (schema.required as string[]) || []
+
+      props.forEach(([key, prop]) => {
+        const isRequired = required.includes(key)
         const indent = ' '.repeat(this.options.indent * depth)
-
-        // --- 注入属性注释 ---
-        objStr += this.formatJSDoc(prop, depth)
-
+        objStr += this.formatJSDoc(prop as { summary?: string }, depth)
         objStr += `${indent}${key}${isRequired ? '' : '?'}: ${this.getTSType(prop, depth + 1)}${this.semi}\n`
       })
       return objStr + ' '.repeat(this.options.indent * (depth - 1)) + '}'
     }
+
+    // 处理数值
     if (schema.type === 'integer' || schema.type === 'number') {
-      // 优先级 1: int64ToString 开启且格式匹配，转 string
-      if (this.options.int64ToString && schema.format === 'int64') {
+      if (this.options.int64ToString && (schema as OpenAPIV3.SchemaObject).format === 'int64') {
         return 'string'
       }
-      // 优先级 2: integerToNumber 开启，转 number
       return 'number'
     }
-    return schema.type || 'any'
+
+    // 处理基本类型
+    const typeMap: Record<string, string> = {
+      string: 'string',
+      boolean: 'boolean',
+    }
+
+    return typeMap[schema.type as string] || 'any'
   }
 
   private extractRawType(typeStr: string): string {
     if (!typeStr || typeStr.startsWith('//')) return 'any'
-
-    // 匹配：export type ResponseData = { ... } 或 export type ResponseData = UserVO;
-    // 使用正则匹配等号后面的所有内容，直到末尾或分号
     const match = typeStr.match(/=\s+([\s\S]+?)(;|$)/)
-
-    if (match && match[1]) {
-      const res = match[1].trim()
-      return res || 'any'
-    }
-
-    return 'any'
+    return match?.[1]?.trim() || 'any'
   }
 
   public getStructuredTypes(path: string, method: string): GeneratedTypes {
     this.usedDefinitions.clear()
-    // const op = (this.doc.paths as any)[path][method.toLowerCase()]
-    const op = this.doc?.paths?.[path]?.[method.toLowerCase()] || {} as any
+
+    // 获取 OperationObject，处理 v2/v3 路径结构差异
+    const pathItem = this.doc.paths?.[path] as Record<string, unknown> | undefined
+    const op = pathItem?.[method.toLowerCase()] as OpenAPIV3.OperationObject | OpenAPIV2.OperationObject | undefined
+
+    if (!op) {
+      return { queryParams: '', requestBody: '', responseData: '', models: '', requestFunction: '' }
+    }
 
     const queryParams = this.generateQueryParams(op)
     const requestBody = this.generateRequestBody(op)
     const responseData = this.generateResponse(op)
 
-    // Debug 打印：看看生成的字符串是什么样的
-    // console.log('Generated Response String:', responseData, op)
-
     let models = ''
     this.usedDefinitions.forEach((schema, name) => {
-      // 注入 Model 顶层注释
-      models += this.formatJSDoc(schema)
+      models += this.formatJSDoc(schema as { summary?: string })
       models += `${this.exp}${this.options.useInterface ? 'interface' : 'type'} ${name} ${this.getTSType(schema)}\n\n`
-    })
-
-    // 构造请求函数的 JSDoc
-    const functionJSDoc = this.formatJSDoc({
-      summary: op.summary,
-      description: op.description,
     })
 
     const ctx: TemplateContext = {
@@ -185,8 +187,8 @@ export class SwaggerToTS {
       path,
       url: path.replace(/\{(\w+)\}/g, '${queryParams.$1}'),
       functionName: op.operationId || 'apiFunc',
-      hasQuery: queryParams !== '// 无查询参数',
-      hasBody: requestBody !== '// 无 Request Body',
+      hasQuery: !queryParams.startsWith('//'),
+      hasBody: !requestBody.startsWith('//'),
       queryParamsType: this.extractRawType(queryParams),
       requestBodyType: this.extractRawType(requestBody),
       responseDataType: this.extractRawType(responseData),
@@ -194,65 +196,61 @@ export class SwaggerToTS {
       operationId: op.operationId,
     }
 
-    // 在模板前拼接注释
-    const rawFunction = this.options.requestTemplate ? this.options.requestTemplate(ctx) : ''
-    const requestFunctionWithDoc = functionJSDoc + rawFunction
+    const functionJSDoc = this.formatJSDoc({ summary: op.summary, description: op.description })
+    const requestFunction = functionJSDoc + this.options.requestTemplate(ctx)
 
-    return {
-      queryParams,
-      requestBody,
-      responseData,
-      models,
-      requestFunction: requestFunctionWithDoc,
-    }
+    return { queryParams, requestBody, responseData, models, requestFunction }
   }
 
-  private generateQueryParams(op: any) {
-    const params = op.parameters?.filter((p: any) => p.in !== 'body') || []
+  private generateQueryParams(op: OpenAPIV3.OperationObject | OpenAPIV2.OperationObject) {
+    const params = (op.parameters as (OpenAPIV3.ParameterObject | OpenAPIV2.ParameterObject)[])?.filter(
+      (p) => p.in !== 'body' && p.in !== 'header'
+    ) || []
+
     if (!params.length) return '// 无查询参数'
+
     let code = `${this.exp}interface QueryParams {\n`
-    params.forEach((p: any) => {
-      code += `  ${p.name}${p.required ? '' : '?'}: ${this.getTSType(p.schema || p, 2)}${this.semi}\n`
+    params.forEach((p) => {
+      // 兼容 V3 的 schema 和 V2 的直接属性
+      const schema = 'schema' in p ? (p.schema as SchemaObject) : (p as SchemaObject)
+      code += `  ${p.name}${p.required ? '' : '?'}: ${this.getTSType(schema, 2)}${this.semi}\n`
     })
     return code + '}'
   }
 
-  private generateRequestBody(op: any) {
-    const schema =
-      op.requestBody?.content?.['application/json']?.schema ||
-      op.parameters?.find((p: any) => p.in === 'body')?.schema
+  private generateRequestBody(op: OpenAPIV3.OperationObject | OpenAPIV2.OperationObject) {
+    let schema: SchemaObject | undefined
+
+    if ('requestBody' in op && op.requestBody) {
+      // OpenAPI 3.0
+      const content = (op.requestBody as OpenAPIV3.RequestBodyObject).content
+      schema = content?.['application/json']?.schema
+    } else if ('parameters' in op) {
+      // Swagger 2.0
+      const bodyParam = op.parameters?.find((p) => (p as OpenAPIV2.InBodyParameterObject).in === 'body') as OpenAPIV2.InBodyParameterObject
+      schema = bodyParam?.schema
+    }
+
     return schema
       ? `${this.exp}type RequestBody = ${this.getTSType(schema)}${this.semi}`
       : '// 无 Request Body'
   }
 
-  private generateResponse(op: any) {
-    // 1. 获取 200 或默认响应
-    const res = op.responses?.['200'] || op.responses?.['201'] || op.responses?.default
+  private generateResponse(op: OpenAPIV3.OperationObject | OpenAPIV2.OperationObject) {
+    const responses = op.responses as Record<string, OpenAPIV3.ResponseObject | OpenAPIV2.ResponseObject>
+    const res = responses?.['200'] || responses?.['201'] || responses?.default
+
     if (!res) return `${this.exp}type ResponseData = any${this.semi}`
 
-    // 2. 这里的逻辑做了增强：
-    //    - 优先匹配 'application/json'
-    //    - 其次匹配 '*/*'
-    //    - 如果都没有，取 content 下的第一个定义的 schema (OpenAPI 3.0)
-    //    - 最后降级兼容 Swagger 2.0 的 res.schema
-    let schema = null
-
-    if (res.content) {
-      schema =
-        res.content['application/json']?.schema ||
-        res.content['*/*']?.schema ||
-        Object.values(res.content)[0]?.['schema']
-    } else {
-      schema = res.schema
+    let schema: SchemaObject | undefined
+    if ('content' in res && res.content) {
+      schema = res.content['application/json']?.schema || Object.values(res.content)[0]?.schema
+    } else if ('schema' in res) {
+      schema = res.schema as SchemaObject
     }
 
-    if (!schema) {
-      return `${this.exp}type ResponseData = any${this.semi}`
-    }
-
-    // 3. 解析类型
-    const typeStr = this.getTSType(schema)
-    return `${this.exp}type ResponseData = ${typeStr}${this.semi}`
+    return schema
+      ? `${this.exp}type ResponseData = ${this.getTSType(schema)}${this.semi}`
+      : `${this.exp}type ResponseData = any${this.semi}`
   }
 }

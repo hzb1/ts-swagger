@@ -1,7 +1,7 @@
-import {
+import  {
   ProxyError,
-  ProxyRequestMessage,
-  ProxyResponseMessage,
+  type ProxyRequestMessage,
+  type ProxyResponseMessage,
 } from './types'
 
 /* ----------------------------------
@@ -14,13 +14,25 @@ function genRequestId() {
 
 function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
   if (!headers) return {}
+
+  // 1. 处理 Headers 对象
   if (headers instanceof Headers) {
-    return Object.fromEntries(headers.entries())
+    const obj: Record<string, string> = {}
+    // Headers 是可迭代的，forEach 是最兼容的处理方式
+    headers.forEach((value, key) => {
+      obj[key] = value
+    })
+    return obj
   }
+
+  // 2. 处理 [string, string][] 数组
   if (Array.isArray(headers)) {
-    return Object.fromEntries(headers)
+    // 显式断言为符合 fromEntries 的元组类型
+    return Object.fromEntries(headers as [string, string][])
   }
-  return headers
+
+  // 3. 处理 Record<string, string>
+  return headers as Record<string, string>
 }
 
 /* ----------------------------------

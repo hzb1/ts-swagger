@@ -1,17 +1,15 @@
-import {useCallback, useMemo, useReducer, useRef, useState} from "react";
+import { useEffect, useReducer, useRef } from "react";
 import type { OpenAPI } from "openapi-types";
-import { request } from "../../../extension/src/shared/proxySdk.ts";
-import type { ApiDetail } from "../../types.ts";
-import { getApiSlug } from "../utils/getApiSlug.ts";
-import {ProxyError} from "../../../extension/src/shared/types.ts";
+import { request } from "../../../extension/src/shared/proxySdk.ts"; //
+import { ProxyError } from "../../../extension/src/shared/types.ts"; //
 
 /* -------------------------------------------------------------------------- */
-/*                                   types                                    */
+/* types                                    */
 /* -------------------------------------------------------------------------- */
 
-const swaggerConfigUrl = "/api-docs/swagger-config";
+const swaggerConfigUrl = "/api-docs/swagger-config"; //
 
-export type SwaggerLoadingStage = "idle" | "config" | "document";
+export type SwaggerLoadingStage = "idle" | "config" | "document"; //
 
 type SwaggerConfig = {
   urls: { name: string; url: string }[];
@@ -22,224 +20,165 @@ type State = {
   document: OpenAPI.Document | null;
   stage: SwaggerLoadingStage;
   error: string | null;
-  firstLoad: boolean;
 };
 
 type Action =
-  | { type: "RESET" }
   | { type: "LOAD_CONFIG" }
   | { type: "LOAD_DOCUMENT" }
   | { type: "CONFIG_SUCCESS"; payload: SwaggerConfig }
   | { type: "DOCUMENT_SUCCESS"; payload: OpenAPI.Document }
-  | { type: "ERROR"; payload: string };
+  | { type: "ERROR"; payload: string }
+  | { type: "CLEAR_ERROR" };
 
 export type UseSwaggerOptions = {
-  onConfigLoaded?: (config: SwaggerConfig) => void;
+  // 当配置加载完成，且发现 URL 缺少 service 时，建议 UI 层补全 URL
+  onAutoSelectService?: (defaultServiceUrl: string) => void;
+  // 文档加载完成后的回调
   onDocumentLoaded?: (doc: OpenAPI.Document) => void;
 };
 
 /* -------------------------------------------------------------------------- */
-/*                                  reducer                                   */
+/* reducer                                   */
 /* -------------------------------------------------------------------------- */
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
-    case "RESET":
-      return {
-        config: null,
-        document: null,
-        stage: "idle",
-        error: null,
-        firstLoad: true,
-      };
     case "LOAD_CONFIG":
-      return { ...state, stage: "config", error: null };
+      return { ...state, config: null, document: null, stage: "config", error: null }; //
     case "LOAD_DOCUMENT":
-      return { ...state, stage: "document", error: null };
+      return { ...state, document: null, stage: "document", error: null }; //
     case "CONFIG_SUCCESS":
-      return { ...state, config: action.payload, stage: "idle" };
+      return { ...state, config: action.payload, stage: "idle" }; //
     case "DOCUMENT_SUCCESS":
-      return {
-        ...state,
-        document: action.payload,
-        stage: "idle",
-        firstLoad: false,
-      };
+      return { ...state, document: action.payload, stage: "idle" }; //
     case "ERROR":
-      return { ...state, stage: "idle", error: action.payload };
+      return { ...state, stage: "idle", error: action.payload }; //
+    case "CLEAR_ERROR":
+      return { ...state, error: null };
     default:
       return state;
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                utils                                       */
+/* utils                                       */
 /* -------------------------------------------------------------------------- */
 
 function normalizeBaseUrl(ip: string) {
   const v = ip.trim();
   if (!v) return "";
-  return /^https?:\/\//.test(v) ? v : `http://${v}`;
+  return /^https?:\/\//.test(v) ? v : `http://${v}`; //
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                   hook                                     */
+/* hook                                     */
 /* -------------------------------------------------------------------------- */
 
-export function useSwagger(options?: UseSwaggerOptions) {
+export function useSwagger(params: {
+  ip: string;
+  serviceUrl?: string;
+  version?: string;
+  options?: UseSwaggerOptions;
+}) {
+  const { ip, serviceUrl, version = "v3", options } = params;
+
   const [state, dispatch] = useReducer(reducer, {
     config: null,
     document: null,
     stage: "idle",
     error: null,
-    firstLoad: true,
   });
 
-  /* --------------------------- concurrency guard --------------------------- */
+  // 使用 Ref 记录请求 ID，防止竞态条件
+  const configRequestIdRef = useRef(0);
+  const docRequestIdRef = useRef(0);
 
-  const requestIdRef = useRef(0);
-  const nextRequestId = () => ++requestIdRef.current;
+  /**
+   * 辅助：统一错误处理
+   */
+  const handleError = (err: unknown, defaultMsg: string) => {
+    let msg = defaultMsg;
+    if (err instanceof ProxyError) {
+      switch (err.type) {
+        case 'NETWORK_ERROR': msg = '网络连接失败'; break;
+        case 'TIMEOUT': msg = '请求超时'; break;
+        default: msg = err.message;
+      }
+    }
+    dispatch({ type: "ERROR", payload: msg });
+  };
 
-  /* ------------------------------ search state ----------------------------- */
+  /* ----------------------- Effect 1: 监听 IP 变化 -> 加载配置 ----------------------- */
 
-  const [searchQuery, setSearchQuery] = useState("");
-
-  /* ------------------------------- core api -------------------------------- */
-
-  const loadSwagger = useCallback( async (params: {
-    ip: string;
-    version?: string;
-    serviceUrl?: string;
-  }) => {
-    const { ip, version = "v3", serviceUrl } = params;
+  useEffect(() => {
     const baseUrl = normalizeBaseUrl(ip);
     if (!baseUrl) return;
 
-    const rid = nextRequestId();
-    dispatch({ type: "RESET" });
+    const rid = ++configRequestIdRef.current;
+    dispatch({ type: "LOAD_CONFIG" });
 
-    try {
-      dispatch({ type: "LOAD_CONFIG" });
-      const configUrl = `${baseUrl}/${version}${swaggerConfigUrl}`;
-      const res = await request(configUrl)
-      if (!res.ok) {
-        throw new Error(`Load swagger config failed: ${res.status}`);
-      }
-      const config = (await res.json()) as SwaggerConfig;
-      if (rid !== requestIdRef.current) return;
+    const fetchConfig = async () => {
+      try {
+        const configUrl = `${baseUrl}/${version}${swaggerConfigUrl}`; //
+        console.log('configUrl', configUrl);
+        const res = await request(configUrl); //
 
-      dispatch({ type: "CONFIG_SUCCESS", payload: config });
-      options?.onConfigLoaded?.(config);
+        if (!res.ok) throw new Error(`Status: ${res.status}`);
+        const config = (await res.json()) as SwaggerConfig;
 
-      const finalServiceUrl =
-        serviceUrl ?? config.urls?.[0]?.url ?? "";
+        if (rid !== configRequestIdRef.current) return;
 
-      if (!finalServiceUrl) return;
+        dispatch({ type: "CONFIG_SUCCESS", payload: config });
 
-      dispatch({ type: "LOAD_DOCUMENT" });
-      const docUrl = `${baseUrl}${finalServiceUrl}`;
-      const doc = (await request(docUrl).then((r) =>
-        r.json(),
-      )) as OpenAPI.Document;
-
-      if (rid !== requestIdRef.current) return;
-
-      dispatch({ type: "DOCUMENT_SUCCESS", payload: doc });
-      options?.onDocumentLoaded?.(doc);
-    } catch (err) {
-      if (rid === requestIdRef.current) {
-        // 优雅地处理 TypeError: Failed to fetch
-        // if (error && error?.name === 'TypeError' && error?.message === 'Failed to fetch') {
-        //   console.error('网络不可达或跨域拦截');
-        //   // 这里可以返回一个自定义的错误对象，方便前端 UI 展示
-        //   dispatch({ type: "ERROR", payload: "无法连接到目标服务器" });
-        // } else {
-        //   dispatch({ type: "ERROR", payload: "Swagger 加载失败" });
-        // }
-        let msg: string;
-        if (err instanceof ProxyError) {
-          // 处理插件定义的特定错误
-          switch (err.type) {
-            case 'NETWORK_ERROR':
-              msg = ('网络连接失败，请检查插件状态');
-              break;
-            case 'TIMEOUT':
-              msg = ('请求超时，请稍后重试');
-              break;
-            case 'INVALID_URL':
-              msg = ('配置的 URL 格式有误');
-              break;
-            default:
-              msg = (`未知错误: ${err.message}`);
-          }
-          dispatch({ type: "ERROR", payload: msg })
-        } else {
-          // 处理原生 fetch 或其他代码运行错误
-          console.error('Native Error:', err);
-          dispatch({ type: "ERROR", payload: "Swagger 加载失败" })
+        // 核心纠偏逻辑：如果 URL 中没有 serviceUrl，且配置里有，通知 UI 补全
+        if (!serviceUrl && config.urls?.length > 0) {
+          options?.onAutoSelectService?.(config.urls[0].url);
+        }
+      } catch (err) {
+        if (rid === configRequestIdRef.current) {
+          handleError(err, "加载 Swagger 配置失败");
         }
       }
-    }
-  }, [options]);
+    };
 
-  /* ------------------------------- searching -------------------------------- */
+    fetchConfig();
+  }, [ip, version]); // 仅在 IP 或版本变化时重新加载配置
 
-  const filteredGroupedApis = useMemo(() => {
-    if (!state.document?.paths) return {};
+  /* --------------------- Effect 2: 监听 Service 变化 -> 加载文档 -------------------- */
 
-    const query = searchQuery.trim().toLowerCase();
-    // if (!query) return {};
+  useEffect(() => {
+    const baseUrl = normalizeBaseUrl(ip);
+    if (!baseUrl || !serviceUrl) return;
 
-    const groups: Record<string, ApiDetail[]> = {};
-    console.log('xxx', {
-      groups,
-      state,
-      searchQuery,
-    })
+    const rid = ++docRequestIdRef.current;
+    dispatch({ type: "LOAD_DOCUMENT" });
 
-    for (const [path, item] of Object.entries(state.document.paths)) {
-      for (const method of ["get", "post", "put", "delete", "patch"] as const) {
-        const op = item[method];
-        if (!op) continue;
+    const fetchDocument = async () => {
+      try {
+        const docUrl = `${baseUrl}${serviceUrl}`; //
+        const res = await request(docUrl);
+        const doc = (await res.json()) as OpenAPI.Document;
 
-        let matchType = "";
-        if (path.toLowerCase().includes(query)) matchType = "路径";
-        else if (op.summary?.toLowerCase().includes(query)) matchType = "名称";
-        else if (op.operationId?.toLowerCase().includes(query)) matchType = "ID";
-        else continue;
+        if (rid !== docRequestIdRef.current) return;
 
-        const tag = op.tags?.[0] ?? "Default";
-        (groups[tag] ||= []).push({
-          key: getApiSlug({ path, method, operation: op }),
-          path,
-          method,
-          matchType,
-          operation: op,
-        });
+        dispatch({ type: "DOCUMENT_SUCCESS", payload: doc });
+        options?.onDocumentLoaded?.(doc);
+      } catch (err) {
+        if (rid === docRequestIdRef.current) {
+          handleError(err, "加载 Swagger 文档失败");
+        }
       }
-    }
+    };
 
-    return groups;
-  }, [state, searchQuery]);
-
-  /* ------------------------------- public api ------------------------------- */
+    fetchDocument();
+  }, [ip, serviceUrl]); // 当 IP 或 Service 任何一个变化且都有值时，加载文档
 
   return {
-    // data
     configData: state.config,
     documentData: state.document,
-    filteredGroupedApis,
-
-    // state
     stage: state.stage,
     error: state.error,
-    firstLoadDocument: state.firstLoad,
-
-    // search
-    searchQuery,
-    setSearchQuery,
-
-    // actions
-    loadSwagger,
+    // 允许手动清除错误状态
+    clearError: () => dispatch({ type: "CLEAR_ERROR" }),
   };
 }
