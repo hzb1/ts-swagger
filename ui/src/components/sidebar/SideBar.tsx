@@ -43,7 +43,7 @@ const SideBar: React.FC<SideBarProps> = (props) => {
   return (
     <div
       className={
-        "sidebar hidden lg:flex fixed flex-col left-0 top-0 bottom-0 w-[19rem] border-r border-gray-200/70 dark:border-white/[0.07] h-full"
+        "sidebar hidden lg:flex flex-col left-0 top-0 bottom-0 border-r border-gray-200/70 dark:border-white/[0.07] h-full"
       }
     >
       <div

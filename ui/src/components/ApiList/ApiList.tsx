@@ -52,7 +52,7 @@ const ApiList: React.FC<ApiListProps> = ({
           <div className={"mb-4"} key={groupItem.id}>
             <div
               className={
-                "sidebar-group-header flex items-center gap-2.5 mb-3.5 lg:mb-2.5 text-gray-900 dark:text-gray-200 font-medium"
+                "sidebar-group-header flex items-center gap-2.5 mb-3.5 lg:mb-2.5 text-gray-900 dark:text-gray-200 font-medium sticky top-0 z-10 bg-white"
               }
               onClick={() => handleGroupTitleClick(groupItem)}
             >

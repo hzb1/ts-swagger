@@ -56,16 +56,17 @@ const Home: React.FC = () => {
     },
   ]);
 
-  const ip = searchParams.get("ip") ?? options[3].value;
+  const ipFromUrl = searchParams.get("ip") ?? options[3].value;
   const serviceUrl = searchParams.get("service") ?? undefined;
   const selectedApiKey = searchParams.get("api");
 
-  const queryApiKey = searchParams.get("api");
+  // const queryApiKey = searchParams.get("api");
 
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') ?? '');
+  const [inputIp, setInputIp] = useState(ipFromUrl);
 
   const { documentData, configData, stage, error } = useSwagger({
-    ip,
+    ip: ipFromUrl,
     serviceUrl,
     options: {
       // 当 Hook 发现配置加载好了但 URL 没 service 时触发
@@ -75,12 +76,30 @@ const Home: React.FC = () => {
           next.set("service", defaultUrl);
           return next;
         }, { replace: true });
+      },
+      onDocumentLoaded: (doc) => {
+        if (doc.paths) {
+          const allTags = new Set<string>();
+          Object.values(doc.paths).forEach((pathItem: any) => {
+            ["get", "post", "put", "delete", "patch"].forEach(method => {
+              const op = pathItem[method];
+              if (op?.tags?.[0]) {
+                // 注意：这里的 ID 生成逻辑应与 apiGroups 保持一致
+                // 如果你的 SideBar 使用的是 stableHash(tag)，则存入 hash
+                allTags.add(stableHash(op.tags[0]));
+              }
+            });
+          });
+          setExpandedGroupList(Array.from(allTags));
+        }
       }
     }
   });
 
   const configLoading = stage === 'config';
   const docLoading = stage === 'document';
+
+  const loading = configLoading || docLoading;
 
   const filteredGroupedApis = useMemo(() => {
     // 这里的 documentData 来自 useSwagger()
@@ -158,8 +177,14 @@ const Home: React.FC = () => {
 
   const { pluginEnabled, checking } = usePluginEnabled();
 
-  const handleSearch = (nextIp: string) => {
-    setSearchParams({ ip: nextIp });
+  const handleCommitIp = (nextIp: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("ip", nextIp);
+      next.delete("api"); // 切换 IP 时建议清除旧的 API 选中态
+      next.delete("service"); // 切换 IP 时也清除旧的服务，触发 Hook 的自动补全
+      return next;
+    });
   };
 
   /**
@@ -227,20 +252,20 @@ const Home: React.FC = () => {
   /**
    * 在初始化时 设置默认展开的分组
    */
-  if (expandedGroupList.length === 0 && queryApiKey && apiGroups) {
-    // 找出当前接口所在的分组
-    const currentGroup = apiGroups.find((group) =>
-      group.children.some((api) => api.key === queryApiKey),
-    );
-    if (currentGroup) {
-      setExpandedGroupList([currentGroup.id]);
-    }
-  }
+  // if (expandedGroupList.length === 0 && queryApiKey && apiGroups) {
+  //   // 找出当前接口所在的分组
+  //   const currentGroup = apiGroups.find((group) =>
+  //     group.children.some((api) => api.key === queryApiKey),
+  //   );
+  //   if (currentGroup) {
+  //     setExpandedGroupList([currentGroup.id]);
+  //   }
+  // }
 
   return (
     <>
-      <Spin spinning={configLoading || docLoading}>
-        <Layout className={"views"}>
+      <Spin spinning={loading}>
+        <Layout className={"views"} hasSider={true}>
           <Sider width={324} style={{ background: colorBgContainer }}>
             <SideBar
               currentServiceUrl={serviceUrl}
@@ -267,17 +292,13 @@ const Home: React.FC = () => {
             >
               <div className={"search-wrapper"}>
                 <AutoComplete
-                  value={ip}
-                  onChange={(value) => {
-                    setSearchParams({ ip: value });
-                  }}
-                  onSelect={handleSearch}
+                  value={inputIp}
+                  onChange={(value) => setInputIp(value)}
+                  onSelect={handleCommitIp}
                   options={options}
                   style={{ width: 304 }}
-                  placeholder={"输入 IP 地址 ( 例如: http://localhost:9966 )"}
-                  showSearch={{ onSearch: handleSearch }}
                 >
-                  <Input.Search placeholder="input here" enterButton />
+                  <Input.Search placeholder="输入 IP 地址" enterButton loading={loading} onSearch={(value) => handleCommitIp(value)} />
                 </AutoComplete>
               </div>
 

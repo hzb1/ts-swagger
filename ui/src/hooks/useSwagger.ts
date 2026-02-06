@@ -33,7 +33,7 @@ type Action =
 export type UseSwaggerOptions = {
   // 当配置加载完成，且发现 URL 缺少 service 时，建议 UI 层补全 URL
   onAutoSelectService?: (defaultServiceUrl: string) => void;
-  // 文档加载完成后的回调
+  // 新增回调：当文档加载成功时触发
   onDocumentLoaded?: (doc: OpenAPI.Document) => void;
 };
 
@@ -162,6 +162,7 @@ export function useSwagger(params: {
         if (rid !== docRequestIdRef.current) return;
 
         dispatch({ type: "DOCUMENT_SUCCESS", payload: doc });
+        // 成功后触发回调
         options?.onDocumentLoaded?.(doc);
       } catch (err) {
         if (rid === docRequestIdRef.current) {
